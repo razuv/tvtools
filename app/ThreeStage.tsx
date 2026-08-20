@@ -25,6 +25,7 @@ type StageProps = {
   fontUrl?: string;
   thickness: number;
   material: string;
+  customMaterialUrl?: string;
   color: string;
   colorOpacity: number;
   glassIor: number;
@@ -426,7 +427,7 @@ function loadTexture(url: string, color = false) {
   return texture;
 }
 
-function makeMaterial(kind: string, color: string, roughness: number, repeat: number, rotation: number, tint: number, colorOpacity: number, glassIor: number, glassTransparency: number) {
+function makeMaterial(kind: string, color: string, roughness: number, repeat: number, rotation: number, tint: number, colorOpacity: number, glassIor: number, glassTransparency: number, customMaterialUrl?:string) {
   const value = new THREE.Color(color);
   const r = roughness / 100;
   const alpha=colorOpacity/100;
@@ -435,6 +436,12 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
   else if (kind === "Metal") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.12,r), metalness:.88 });
   else if (kind === "Chrome") result = new THREE.MeshPhysicalMaterial({ color:new THREE.Color("#f3f5f7"), roughness:Math.max(.025,r*.22), metalness:1, clearcoat:1, clearcoatRoughness:.02, envMapIntensity:2.8 });
   else if (kind === "ASCII") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.16,r), metalness:.08 });
+  else if (customMaterialUrl) {
+    const map=loadTexture(customMaterialUrl,true);
+    map.repeat.set(repeat,repeat);map.center.set(.5,.5);map.rotation=THREE.MathUtils.degToRad(rotation);map.needsUpdate=true;
+    const textureColor=new THREE.Color("#ffffff").lerp(value,tint/100);
+    result=new THREE.MeshStandardMaterial({color:textureColor,map,roughness:Math.max(.45,r),metalness:0});
+  }
   else if (textureAssets[kind]) {
     const [diffuseUrl, normalUrl] = textureAssets[kind];
     const map = loadTexture(diffuseUrl, true);
@@ -559,7 +566,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       if(event.data.error)return;
       const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(event.data.position,3));geometry.setAttribute("normal",new THREE.BufferAttribute(event.data.normal,3));if(event.data.uv.length)geometry.setAttribute("uv",new THREE.BufferAttribute(event.data.uv,2));geometry.computeBoundingBox();geometry.computeBoundingSphere();
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
-      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.colorOpacity,current.glassIor,current.glassTransparency));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
+      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
     };
     const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
@@ -615,8 +622,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
-    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.colorOpacity,props.glassIor,props.glassTransparency); old.dispose(); } });
-  }, [props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.colorOpacity,props.glassIor,props.glassTransparency]);
+    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl); old.dispose(); } });
+  }, [props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.colorOpacity,props.glassIor,props.glassTransparency]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);
 

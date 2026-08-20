@@ -3,16 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
 
-type Material = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome" | "ASCII";
+type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome" | "ASCII";
+type Material = BuiltInMaterial | `Custom:${string}`;
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
 type ShapeParams = { thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
+type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
 type StoredShapeItem = Omit<ShapeItem,"source">;
-type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[] };
+type StoredCustomMaterial = Omit<CustomMaterial,"source">;
+type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
 
 const defaultShapeParams:ShapeParams={thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88,asciiCharacters:90,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
 
-const materials: { name: Material; note: string }[] = [
+const materials: { name: BuiltInMaterial; note: string }[] = [
   { name: "Gloss", note: "High shine" },
   { name: "Metal", note: "Brushed" },
   { name: "Glass", note: "Clear" },
@@ -27,7 +30,7 @@ const materials: { name: Material; note: string }[] = [
 ];
 
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
-const textureMaterials: Material[] = ["Wood","Stone","Marble","Leather","Concrete"];
+const textureMaterials: BuiltInMaterial[] = ["Wood","Stone","Marble","Leather","Concrete"];
 const backgrounds = ["Noir","Sky","Sunset","Gallery","Acid"];
 const asciiCharacterSets:Record<Exclude<AsciiCharacterSet,"Custom Set">,string>={
   Letters:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -89,6 +92,7 @@ function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ 
 
 export default function Home() {
   const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape]);
+  const [customMaterials,setCustomMaterials]=useState<CustomMaterial[]>([]);
   const [activeShapeId, setActiveShapeId] = useState("demo-rzw");
   const [libraryReady, setLibraryReady] = useState(false);
   const [sourceMode, setSourceMode] = useState<"image"|"text">("image");
@@ -136,6 +140,7 @@ export default function Home() {
   const stageRef = useRef<StageHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const backgroundRef = useRef<HTMLInputElement>(null);
+  const materialRef=useRef<HTMLInputElement>(null);
   const axisDragRef = useRef<{axis:"x"|"y"|"z";startX:number;startValue:number}|null>(null);
   const clipboardRef = useRef<ShapeParams|null>(null);
   const historyRef = useRef<ShapeParams[]>([]);
@@ -146,11 +151,16 @@ export default function Home() {
 
   const shapesRef = useRef(shapeItems);
   shapesRef.current=shapeItems;
+  const materialsRef=useRef(customMaterials);
+  materialsRef.current=customMaterials;
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
   const currentParams:ShapeParams={thickness,segments,surfaceDetail,edge,mass,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
+  const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
+  const customMaterialUrl=activeCustomMaterial?.source;
+  const isTexturedMaterial=textureMaterials.includes(material as BuiltInMaterial)||Boolean(activeCustomMaterial);
   const paramsSignature=JSON.stringify(currentParams);
 
   useEffect(()=>{
@@ -158,16 +168,17 @@ export default function Home() {
     readStoredLibrary().then(saved=>{
       if(cancelled)return;
       const restored=(saved?.items??[]).map(item=>({...item,source:item.blob?URL.createObjectURL(item.blob):null}));
+      const restoredMaterials=(saved?.materials??[]).map(item=>({...item,source:URL.createObjectURL(item.blob)}));
       const items=[demoShape,...restored];
       const target=items.find(item=>item.id===saved?.activeShapeId)??items[0];
-      setShapeItems(items);setActiveShapeId(target.id);setSourceMode(target.kind==="text"?"text":"image");
+      setShapeItems(items);setCustomMaterials(restoredMaterials);setActiveShapeId(target.id);setSourceMode(target.kind==="text"?"text":"image");
       if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}
       const params=target.params??{...defaultShapeParams};applyParams(params);resetHistory(params);
     }).catch(()=>{}).finally(()=>{if(!cancelled)setLibraryReady(true);});
     return()=>{cancelled=true;};
   },[]);
 
-  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);}); }, []);
+  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);});materialsRef.current.forEach(item=>URL.revokeObjectURL(item.source)); }, []);
 
   useEffect(() => () => { if (background.startsWith("blob:")) URL.revokeObjectURL(background); }, [background]);
 
@@ -183,13 +194,14 @@ export default function Home() {
     if(!libraryReady)return;
     const timer=window.setTimeout(()=>{
       const items:StoredShapeItem[]=shapeItems.filter(item=>!item.demo).map(({source:_,...item})=>item);
-      const snapshot:StoredLibrary={version:1,activeShapeId,items};
+      const materials:StoredCustomMaterial[]=customMaterials.map(({source:_,...item})=>item);
+      const snapshot:StoredLibrary={version:1,activeShapeId,items,materials};
       cacheWriteRef.current=cacheWriteRef.current.catch(()=>{}).then(()=>writeStoredLibrary(snapshot)).then(()=>{cacheErrorRef.current=false;}).catch(()=>{
         if(!cacheErrorRef.current){cacheErrorRef.current=true;flash("Could not cache the shape library");}
       });
     },250);
     return()=>window.clearTimeout(timer);
-  },[shapeItems,activeShapeId,libraryReady]);
+  },[shapeItems,customMaterials,activeShapeId,libraryReady]);
 
   const flash = (message: string) => {
     setToast(message);
@@ -225,6 +237,20 @@ export default function Home() {
     if (background.startsWith("blob:")) URL.revokeObjectURL(background);
     setBackground(URL.createObjectURL(file));
     flash("Background uploaded");
+  };
+
+  const importMaterial=async(file?:File)=>{
+    if(!file)return;
+    if(!/\.jpe?g$/i.test(file.name)&&!/^image\/jpeg$/i.test(file.type)){flash("JPG materials only");return;}
+    if(file.size>8*1024*1024){flash("Material is larger than 8 MB");return;}
+    try{
+      const bitmap=await createImageBitmap(file);
+      const width=bitmap.width,height=bitmap.height;bitmap.close();
+      const id=`material-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const item:CustomMaterial={id,name:file.name.replace(/\.jpe?g$/i,"").slice(0,28)||"Custom JPG",blob:file,source:URL.createObjectURL(file),width,height};
+      setCustomMaterials(items=>[...items,item]);setMaterial(`Custom:${id}`);
+      flash(width===height&&width>=1024?"Custom material added":"Material added · 1024×1024 square recommended");
+    }catch{flash("Could not read this JPG");}
   };
 
   const resetView = () => {
@@ -292,7 +318,7 @@ export default function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} thickness={thickness} material={material} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>Building geometry</b><small>Interface stays responsive</small></div>}
             <div className="drag-hint"><span>↔</span> Drag to orbit · Scroll to zoom</div>
           </div>
@@ -329,10 +355,12 @@ export default function Home() {
           <details className="property-section" open>
             <summary><span>Material</span><button onClick={(e)=>{e.preventDefault();resetMaterial();}} aria-label="Reset material">↺</button></summary>
             <div className="section-body">
-              <div className="control-row"><span>Surface</span><output>{material}</output></div>
-              <div className="materials">{materials.map((item) => <button key={item.name} className={material === item.name ? "active" : ""} onClick={() => setMaterial(item.name)}><span className={`material-ball ${item.name.toLowerCase()}`} /><b>{item.name}</b><small>{item.note}</small></button>)}</div>
-              {textureMaterials.includes(material) && <div className="texture-controls">
-                <div className="texture-credit"><span>CC0</span> Texture by Poly Haven</div>
+              <div className="control-row"><span>Surface</span><output>{activeCustomMaterial?.name??material}</output></div>
+              <div className="materials">{materials.map((item) => <button key={item.name} className={material === item.name ? "active" : ""} onClick={() => setMaterial(item.name)}><span className={`material-ball ${item.name.toLowerCase()}`} /><b>{item.name}</b><small>{item.note}</small></button>)}{customMaterials.map(item=><button key={item.id} className={material===`Custom:${item.id}`?"active":""} onClick={()=>setMaterial(`Custom:${item.id}`)}><span className="material-ball custom-jpg" style={{backgroundImage:`url(${item.source})`}}/><b>{item.name}</b><small>{item.width}×{item.height} JPG</small></button>)}</div>
+              <button className="material-drop" onClick={()=>materialRef.current?.click()} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();void importMaterial(event.dataTransfer.files[0]);}}><span>＋</span><strong>Drop JPG material</strong><small>Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB</small></button>
+              <input ref={materialRef} className="file-input" type="file" accept=".jpg,.jpeg,image/jpeg" onChange={event=>void importMaterial(event.target.files?.[0])}/>
+              {isTexturedMaterial && <div className="texture-controls">
+                <div className="texture-credit"><span>{activeCustomMaterial?"JPG":"CC0"}</span> {activeCustomMaterial?"Custom diffuse / albedo":"Texture by Poly Haven"}</div>
                 <RangeControl label="Repeat" value={textureRepeat} min={.5} max={8} step={.5} suffix="×" onChange={setTextureRepeat}/>
                 <RangeControl label="Rotation" value={textureRotation} min={-180} max={180} suffix="°" onChange={setTextureRotation}/>
                 <RangeControl label="Color overlay" value={textureTint} min={0} max={100} suffix="%" onChange={setTextureTint}/>
