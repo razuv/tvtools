@@ -418,6 +418,7 @@ const textureAssets: Record<string, [string, string]> = {
   Marble:[`${import.meta.env.BASE_URL}textures/marble.jpg`,`${import.meta.env.BASE_URL}textures/marble-normal.jpg`],
   Leather:[`${import.meta.env.BASE_URL}textures/leather.jpg`,`${import.meta.env.BASE_URL}textures/leather-normal.jpg`],
   Concrete:[`${import.meta.env.BASE_URL}textures/concrete.jpg`,`${import.meta.env.BASE_URL}textures/concrete-normal.jpg`],
+  Rubber:[`${import.meta.env.BASE_URL}textures/rubber.jpg`,`${import.meta.env.BASE_URL}textures/rubber-normal.jpg`],
 };
 const textureCache = new Map<string, THREE.Texture>();
 
@@ -449,9 +450,9 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
     const map = loadTexture(diffuseUrl, true);
     const normalMap = loadTexture(normalUrl);
     [map, normalMap].forEach((texture) => { texture.repeat.set(repeat, repeat); texture.center.set(.5, .5); texture.rotation = THREE.MathUtils.degToRad(rotation); texture.needsUpdate = true; });
-    const textureRoughness = kind === "Marble" ? .34 : kind === "Leather" ? .58 : .78;
+    const textureRoughness = kind === "Marble" ? .34 : kind === "Leather" ? .58 : kind === "Rubber" ? .9 : .78;
     const textureColor = new THREE.Color("#ffffff").lerp(value, tint / 100);
-    result = new THREE.MeshStandardMaterial({ color:textureColor, map, normalMap, normalScale:new THREE.Vector2(.62,.62), roughness:Math.max(textureRoughness,r), metalness:0 });
+    result = new THREE.MeshStandardMaterial({ color:textureColor, map, normalMap, normalScale:new THREE.Vector2(kind==="Rubber"?.78:.62,kind==="Rubber"?.78:.62), roughness:Math.max(textureRoughness,r), metalness:0 });
   }
   else if (kind === "Clay") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.82,r), metalness:0 });
   else result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.06,r*.7), metalness:.04, clearcoat:1, clearcoatRoughness:.08 });

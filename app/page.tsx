@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
 
-type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome" | "ASCII";
+type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Rubber" | "Clay" | "Chrome" | "ASCII";
 type Material = BuiltInMaterial | `Custom:${string}`;
 type GeometryMode = "Extrude" | "Revolve" | "Inflate";
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
@@ -25,13 +25,14 @@ const materials: { name: BuiltInMaterial; note: string }[] = [
   { name: "Marble", note: "CC0 texture" },
   { name: "Leather", note: "CC0 texture" },
   { name: "Concrete", note: "CC0 texture" },
+  { name: "Rubber", note: "CC0 texture" },
   { name: "Clay", note: "Soft matte" },
   { name: "Chrome", note: "Mirror" },
   { name: "ASCII", note: "Real-time text" },
 ];
 
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
-const textureMaterials: BuiltInMaterial[] = ["Wood","Stone","Marble","Leather","Concrete"];
+const textureMaterials: BuiltInMaterial[] = ["Wood","Stone","Marble","Leather","Concrete","Rubber"];
 const backgrounds = ["Noir","Sky","Sunset","Gallery","Acid"];
 const asciiCharacterSets:Record<Exclude<AsciiCharacterSet,"Custom Set">,string>={
   Letters:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -48,6 +49,12 @@ const googleFonts = [
   {name:"Roboto Mono",family:"Studio Mono",url:publicAsset("fonts/roboto-mono.ttf")},
   {name:"Bebas Neue",family:"Studio Bebas",url:publicAsset("fonts/bebas-neue.ttf")},
   {name:"Pacifico",family:"Studio Pacifico",url:publicAsset("fonts/pacifico.ttf")},
+  {name:"Montserrat · Cyrillic",family:"Studio Montserrat",url:publicAsset("fonts/montserrat.ttf")},
+  {name:"Rubik · Cyrillic",family:"Studio Rubik",url:publicAsset("fonts/rubik.ttf")},
+  {name:"PT Sans · Cyrillic",family:"Studio PT Sans",url:publicAsset("fonts/pt-sans.ttf")},
+  {name:"PT Serif · Cyrillic",family:"Studio PT Serif",url:publicAsset("fonts/pt-serif.ttf")},
+  {name:"Arsenal · Cyrillic",family:"Studio Arsenal",url:publicAsset("fonts/arsenal.ttf")},
+  {name:"Russo One · Cyrillic",family:"Studio Russo One",url:publicAsset("fonts/russo-one.ttf")},
 ];
 
 const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image"};
@@ -339,7 +346,7 @@ export default function Home() {
           <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
           <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src={publicAsset("rzw.svg")} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:item.demo?"Demo vector":"Imported image"}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
           <div className="tip"><span>i</span><p>{sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion."}</p></div>
-          <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><span><img src={publicAsset("favicon.svg")} alt=""/></span><strong>Alexey Razuvaev</strong><i>↗</i></a>
+          <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
         </aside>
 
         <section className="stage" aria-label="3D preview">
@@ -360,7 +367,7 @@ export default function Home() {
 
         <aside className="panel properties-panel">
           <div className="panel-heading properties-heading"><span>02</span><h2>Properties</h2><button className="reset-all" onClick={resetAll}>↺ Reset all</button></div>
-          <div className="parameter-clipboard"><button onClick={copyParams}>Copy Parameters</button><button onClick={pasteParams}>Paste Parameters</button></div>
+          <div className="parameter-clipboard"><button onClick={copyParams}>Copy Properties</button><button onClick={pasteParams}>Paste Properties</button></div>
 
           <details className="property-section" open>
             <summary><span>Geometry</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
