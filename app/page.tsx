@@ -20,7 +20,7 @@ const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segmen
 const ru:Record<string,string>={
   "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Google Font":"Шрифт Google","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
   "Text becomes real editable 3D outlines, including counters inside letters.":"Текст преобразуется в редактируемые 3D-контуры, включая полости внутри букв.","Transparent shapes with clean edges give the best extrusion.":"Прозрачные фигуры с чистыми краями дают лучший результат экструзии.",
-  "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","Drag to orbit · Scroll to zoom":"Перетаскивайте для вращения · Колесо для масштаба",
+  "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","LMB rotate · RMB pan · Scroll zoom":"ЛКМ — вращение · ПКМ — перемещение · Колесо — масштаб",
   "Properties":"Параметры","Reset all":"Сбросить всё","Copy Properties":"Копировать параметры","Paste Properties":"Вставить параметры","Geometry":"Геометрия","Extrude":"Экструзия","Revolve":"Вращение","Inflate":"Надувание","Thickness":"Толщина","Segments":"Сегменты","Surface detail":"Детализация поверхности","Edge":"Фаска","Mass":"Масса","Inflation":"Надувание",
   "Deform":"Деформация","Bend":"Изгиб","Bulge":"Выпуклость","Taper":"Сужение","Twist":"Скручивание","Material":"Материал","Surface":"Поверхность","High shine":"Глянец","Brushed":"Шлифованный","Clear":"Прозрачный","CC0 texture":"Текстура CC0","Soft matte":"Мягкий матовый","Mirror":"Зеркальный","Real-time text":"Текст в реальном времени",
   "Drop JPG material":"Перетащите JPG-материал","Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB":"Рекомендуется: бесшовный квадрат 1024×1024, sRGB, ≤ 8 МБ","Custom diffuse / albedo":"Пользовательский diffuse / albedo","Texture by Poly Haven":"Текстура Poly Haven","Texture by ambientCG":"Текстура ambientCG","Repeat":"Повтор","Rotation":"Вращение","Color overlay":"Наложение цвета","Normal strength":"Сила рельефа","Physical refraction":"Физическая рефракция","Refraction (IOR)":"Рефракция (IOR)","Transparency":"Прозрачность",
@@ -114,6 +114,10 @@ function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ 
   return <label className="range-control"><span>{label}<span className="number-wrap"><input aria-label={`${label} value`} type="number" min={min} max={max} step={step} value={value} onChange={(e)=>update(+e.target.value)} /><i>{suffix}</i></span></span><input aria-label={label} type="range" min={min} max={max} step={step} value={value} style={{background:`linear-gradient(90deg,#e0e0e0 0 ${progress}%,#292929 ${progress}% 100%)`}} onChange={(e)=>onChange(+e.target.value)} /></label>;
 }
 
+function ColorSwatch({color,selected,onChoose,onRemove}:{color:string;selected:boolean;onChoose:()=>void;onRemove:()=>void}){
+  return <span className="palette-swatch"><button aria-label={`Set color ${color}`} className={selected?"selected":""} style={{background:color}} onClick={onChoose}/><button className="palette-delete" aria-label={`Remove color ${color}`} onClick={(event)=>{event.stopPropagation();onRemove();}}>×</button></span>;
+}
+
 const lightPresets=[
   {name:"Standard",x:-3,y:5,z:5},
   {name:"Diffuse",x:0,y:8,z:2},
@@ -183,7 +187,7 @@ export default function Home() {
   const [asciiCharacterSet,setAsciiCharacterSet]=useState<AsciiCharacterSet>("Letters + Numbers");
   const [asciiCustomSet,setAsciiCustomSet]=useState(" .:-=+*#%@");
   const [background, setBackground] = useState("None");
-  const [rotation, setRotation] = useState({ x: -16, y: 28, z: -7 });
+  const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
   const [triangles, setTriangles] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -314,7 +318,7 @@ export default function Home() {
   };
 
   const resetView = () => {
-    setRotation({ x: -16, y: 28, z: -7 });
+    setRotation({ x: 0, y: 0, z: 0 });
     stageRef.current?.reset();
   };
   const updateAxis=(axis:"x"|"y"|"z",value:number)=>{const next=Math.max(-360,Math.min(360,value));setRotation(current=>({...current,[axis]:next}));stageRef.current?.setRotation(axis,next);};
@@ -352,7 +356,7 @@ export default function Home() {
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
   const resetAll = () => { resetGeometry(); resetDeform(); resetMaterial(); resetAppearance(); resetLighting(); resetBackground(); resetView(); flash("All parameters reset"); };
-  const chooseColor = (next:string, add=false) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add&&!paletteColors.includes(normalized))setPaletteColors(items=>[...items,normalized]); };
+  const chooseColor = (next:string, add=true) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add&&!paletteColors.includes(normalized))setPaletteColors(items=>[...items,normalized]); };
   const commitHex = () => { const value=hexDraft.trim(); if(/^#[0-9A-F]{6}$/i.test(value))chooseColor(value,true); else setHexDraft(color.toUpperCase()); };
 
   const embedCode = `<iframe src="https://shape3d.site/embed/${fileName.replace(/\W/g, "-")}" width="640" height="640" style="border:0" allow="fullscreen"></iframe>`;
@@ -379,9 +383,9 @@ export default function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalStrength} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalStrength} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} demoSpin={Boolean(activeShape?.demo)} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>{t("Building geometry")}</b><small>{t("Interface stays responsive")}</small></div>}
-            <div className="drag-hint"><span>↔</span> {t("Drag to orbit · Scroll to zoom")}</div>
+            <div className="drag-hint"><span>↔</span> {t("LMB rotate · RMB pan · Scroll zoom")}</div>
           </div>
           <div className="axis-row">
             {(["x", "y", "z"] as const).map(axis=><div key={axis} className="axis-control" onPointerDown={event=>startAxisDrag(axis,event)} onPointerMove={moveAxisDrag} onPointerUp={endAxisDrag} onPointerCancel={endAxisDrag}><span>{axis.toUpperCase()}</span><input aria-label={`${axis.toUpperCase()} rotation`} type="number" min={-360} max={360} step={1} value={Math.round(rotation[axis]*10)/10} onChange={event=>updateAxis(axis,+event.target.value)}/><i>°</i></div>)}
@@ -443,7 +447,7 @@ export default function Home() {
             <summary><span>{t("Appearance")}</span><button onClick={(e)=>{e.preventDefault();resetAppearance();}} aria-label="Reset appearance">↺</button></summary>
             <div className="section-body">
               <div className="control-row"><span>{t("Color")}</span><output>{color.toUpperCase()}</output></div>
-              <div className="color-row">{paletteColors.map((item) => <button key={item} aria-label={`Set color ${item}`} className={color === item ? "selected" : ""} style={{ background: item }} onClick={() => chooseColor(item)} />)}<label className="custom-color">+<input aria-label="Custom color" type="color" value={color} onChange={(e) => chooseColor(e.target.value)} onBlur={()=>chooseColor(color,true)} /></label></div>
+              <div className="color-row">{paletteColors.map((item) => <ColorSwatch key={item} color={item} selected={color===item} onChoose={()=>chooseColor(item)} onRemove={()=>setPaletteColors(items=>items.filter(entry=>entry!==item))}/>)}<label className="custom-color">+<input aria-label="Custom color" type="color" value={color} onInput={(e) => chooseColor(e.currentTarget.value,true)} onChange={(e) => chooseColor(e.target.value,true)} /></label></div>
               <label className="hex-control"><span>HEX</span><input aria-label="HEX color" value={hexDraft} maxLength={7} spellCheck={false} onChange={(e)=>setHexDraft(e.target.value.toUpperCase())} onBlur={commitHex} onKeyDown={(e)=>{if(e.key==="Enter"){commitHex();e.currentTarget.blur();}}}/></label>
               <div className="mini-controls">
                 <RangeControl label={t("Roughness")} value={roughness} min={0} max={100} suffix="%" onChange={setRoughness}/>

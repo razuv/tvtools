@@ -53,12 +53,14 @@ type StageProps = {
   textureRotation: number;
   textureTint: number;
   normalStrength: number;
+  demoSpin?: boolean;
   asciiCharacters: number;
   asciiGlyphs: string;
   background: string;
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
   onError?: (message: string) => void;
+  onRotationChange?: (rotation: {x:number;y:number;z:number}) => void;
 };
 
 type Runtime = {
@@ -76,6 +78,8 @@ type Runtime = {
   asciiCanvas: HTMLCanvasElement;
   asciiSample: HTMLCanvasElement;
   asciiLastFrame: number;
+  autoRotate: boolean;
+  lastRotationEmit: number;
 };
 
 const defaultAsciiRamp = " .,:;irsXA253hMHGS#9B&@";
@@ -453,7 +457,8 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
     const map = loadTexture(diffuseUrl, true);
     const normalMap = loadTexture(normalUrl);
     const roughnessMap=roughnessUrl?loadTexture(roughnessUrl):undefined;
-    [map, normalMap, roughnessMap].filter(Boolean).forEach((texture) => { texture!.repeat.set(repeat, repeat); texture!.center.set(.5, .5); texture!.rotation = THREE.MathUtils.degToRad(rotation); texture!.needsUpdate = true; });
+    const effectiveRepeat=kind==="Rubber"?repeat*.5:repeat;
+    [map, normalMap, roughnessMap].filter(Boolean).forEach((texture) => { texture!.repeat.set(effectiveRepeat, effectiveRepeat); texture!.center.set(.5, .5); texture!.rotation = THREE.MathUtils.degToRad(rotation); texture!.needsUpdate = true; });
     const textureRoughness = kind === "Marble" ? .34 : kind === "Leather" ? .58 : kind === "Rubber" ? .9 : .78;
     const textureColor = new THREE.Color("#ffffff").lerp(value, tint / 100);
     const normalScale=Math.max(0,normalStrength/100)*(kind==="Rubber"?1.2:1);
@@ -486,12 +491,14 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
   useImperativeHandle(ref, () => ({
     reset() {
       const runtime = runtimeRef.current; if (!runtime) return;
-      runtime.model.rotation.set(THREE.MathUtils.degToRad(-16),THREE.MathUtils.degToRad(28),THREE.MathUtils.degToRad(-7));
-      runtime.camera.position.set(0, .1, 5.4);
+      runtime.autoRotate=false;
+      runtime.model.rotation.set(0,0,0);
+      runtime.camera.position.set(0, 0, 5.4);
       runtime.controls.target.set(0, 0, 0); runtime.controls.update();
+      latestPropsRef.current.onRotationChange?.({x:0,y:0,z:0});
     },
-    rotate(axis, amount = 15) { const runtime = runtimeRef.current; if (runtime) runtime.model.rotation[axis] += THREE.MathUtils.degToRad(amount); },
-    setRotation(axis,degrees){const runtime=runtimeRef.current;if(runtime)runtime.model.rotation[axis]=THREE.MathUtils.degToRad(degrees);},
+    rotate(axis, amount = 15) { const runtime = runtimeRef.current; if (runtime) {runtime.autoRotate=false;runtime.model.rotation[axis] += THREE.MathUtils.degToRad(amount);latestPropsRef.current.onRotationChange?.({x:THREE.MathUtils.radToDeg(runtime.model.rotation.x),y:THREE.MathUtils.radToDeg(runtime.model.rotation.y),z:THREE.MathUtils.radToDeg(runtime.model.rotation.z)});}},
+    setRotation(axis,degrees){const runtime=runtimeRef.current;if(runtime){runtime.autoRotate=false;runtime.model.rotation[axis]=THREE.MathUtils.degToRad(degrees);latestPropsRef.current.onRotationChange?.({x:THREE.MathUtils.radToDeg(runtime.model.rotation.x),y:THREE.MathUtils.radToDeg(runtime.model.rotation.y),z:THREE.MathUtils.radToDeg(runtime.model.rotation.z)});}},
     exportPng(name, withBackground = false) {
       const runtime = runtimeRef.current; if (!runtime) return;
       const host = runtime.renderer.domElement.parentElement!;
@@ -531,7 +538,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const host = hostRef.current!;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 100);
-    camera.position.set(0, .1, 5.4);
+    camera.position.set(0, 0, 5.4);
     const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -549,8 +556,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     host.appendChild(asciiCanvas);
     const asciiSample=document.createElement("canvas");
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = .075; controls.enablePan = false; controls.minDistance = 3; controls.maxDistance = 8;
-    const model = new THREE.Group(); model.rotation.set(THREE.MathUtils.degToRad(-16),THREE.MathUtils.degToRad(28),THREE.MathUtils.degToRad(-7)); scene.add(model);
+    controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .7; controls.maxDistance = 24; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
+    const model = new THREE.Group(); model.rotation.set(0,0,0); scene.add(model);
     const ambient=new THREE.HemisphereLight(0xffffff,0x202020,1.8);scene.add(ambient);
     const key = new THREE.DirectionalLight(0xffffff, 4.2); key.position.set(-3, 5, 5);
     key.castShadow = true;
@@ -567,7 +574,19 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0 };
+    runtimeRef.current = { scene, camera, renderer, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    let rotating=false,lastPointerX=0,lastPointerY=0;
+    const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
+    const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
+    const pointerMove=(event:PointerEvent)=>{if(!rotating)return;const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;lastPointerX=event.clientX;lastPointerY=event.clientY;model.rotation.y+=dx*.008;model.rotation.x+=dy*.008;emitRotation();};
+    const pointerUp=(event:PointerEvent)=>{if(event.button===0)rotating=false;};
+    const stopAuto=()=>{if(runtimeRef.current)runtimeRef.current.autoRotate=false;};
+    renderer.domElement.addEventListener("pointerdown",pointerDown);
+    renderer.domElement.addEventListener("pointermove",pointerMove);
+    renderer.domElement.addEventListener("pointerup",pointerUp);
+    renderer.domElement.addEventListener("pointercancel",pointerUp);
+    renderer.domElement.addEventListener("wheel",stopAuto,{passive:true});
+    renderer.domElement.addEventListener("contextmenu",event=>event.preventDefault());
     worker.onmessage=(event)=>{
       const runtime=runtimeRef.current;if(!runtime||event.data.id!==runtime.requestId)return;
       latestPropsRef.current.onLoading?.(false);
@@ -578,10 +597,11 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     };
     const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
-    let frame = 0;
+    let frame = 0;const demoStart=performance.now();
     const loop = (time=0) => {
       controls.update();
       const runtime=runtimeRef.current;
+      if(runtime?.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
       if(runtime&&latestPropsRef.current.material==="ASCII"){
         renderer.domElement.style.opacity="0";
         asciiCanvas.style.display="block";
@@ -599,7 +619,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose(); renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {

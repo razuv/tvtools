@@ -149,8 +149,7 @@ input[type="range"]::-moz-range-thumb { width:9px; height:9px; border:1px solid 
 .ascii-set-control input { padding-right:48px; }
 .ascii-set-control small { position:absolute; right:9px; bottom:8px; color:#686868; font:7px var(--font-mono); pointer-events:none; }
 .color-row { display:flex; flex-wrap:wrap; gap:8px; }
-.color-row>button,.custom-color { width:27px; height:27px; border-radius:50%; border:2px solid #181818; outline:1px solid #393939; cursor:pointer; }
-.color-row>button.selected { outline:2px solid #fff; outline-offset:2px; }
+.palette-swatch{position:relative;width:27px;height:27px;display:block}.palette-swatch>button:first-child,.custom-color { width:27px; height:27px; border-radius:50%; border:2px solid #181818; outline:1px solid #393939; cursor:pointer; }.palette-swatch>button:first-child.selected { outline:2px solid #fff; outline-offset:2px; }.palette-delete{position:absolute;inset:-3px;width:33px;height:33px;border:0;border-radius:50%;background:rgba(5,5,5,.82);color:#fff;cursor:pointer;font:15px/1 var(--font-mono);display:grid;place-items:center;opacity:0;visibility:hidden;pointer-events:none}.palette-swatch:hover .palette-delete{animation:palette-delete-in .15s ease-out 3s forwards}@keyframes palette-delete-in{0%{opacity:0;visibility:hidden;pointer-events:none;transform:scale(.85)}1%{visibility:visible;pointer-events:none}100%{opacity:1;visibility:visible;pointer-events:auto;transform:scale(1)}}
 .custom-color { display:grid; place-items:center; background:#151515; position:relative; overflow:hidden; color:#aaa; }
 .custom-color input { position:absolute; opacity:0; inset:0; cursor:pointer; }
 .hex-control { margin-top:12px; height:30px; display:flex; align-items:center; justify-content:space-between; gap:10px; color:#777; font:8px var(--font-mono); }
