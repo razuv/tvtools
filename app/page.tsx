@@ -29,7 +29,7 @@ const textureMaterials: Material[] = ["Wood","Stone","Marble","Leather","Concret
 const backgrounds = ["Noir","Sky","Sunset","Gallery","Acid"];
 const publicAsset = (path:string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/,"")}`;
 const googleFonts = [
-  {name:"Inter",family:"Studio Inter",url:publicAsset("fonts/inter.ttf")},
+  {name:"Inter",family:"Inter",url:publicAsset("fonts/inter.ttf")},
   {name:"Space Grotesk",family:"Studio Space",url:publicAsset("fonts/space-grotesk.ttf")},
   {name:"Playfair Display",family:"Studio Playfair",url:publicAsset("fonts/playfair-display.ttf")},
   {name:"Roboto Mono",family:"Studio Mono",url:publicAsset("fonts/roboto-mono.ttf")},
