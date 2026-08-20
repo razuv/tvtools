@@ -127,6 +127,10 @@ input[type="range"]::-moz-range-thumb { width:9px; height:9px; border:1px solid 
 .material-ball.ascii { position:relative; background:#080808; color:#e0e0e0; border:1px solid #444; box-shadow:none; }.material-ball.ascii:after{content:"@";position:absolute;inset:0;display:grid;place-items:center;font:13px var(--font-mono)}
 .texture-controls { margin-top:10px; padding:11px; border:1px solid #292929; border-radius:8px; background:#101010; display:grid; gap:13px; }
 .texture-credit { color:#777; font:8px var(--font-mono); display:flex; align-items:center; gap:7px; }.texture-credit span{background:#272727;color:#bbb;border-radius:3px;padding:3px 5px}
+.ascii-set-control { position:relative; display:grid; gap:7px; color:#aaa; font-size:9px; }
+.ascii-set-control select,.ascii-set-control input { width:100%; height:31px; padding:0 9px; border:0; border-radius:5px; outline:0; background:#191919; color:#e0e0e0; font:9px var(--font-mono); }
+.ascii-set-control input { padding-right:48px; }
+.ascii-set-control small { position:absolute; right:9px; bottom:8px; color:#686868; font:7px var(--font-mono); pointer-events:none; }
 .color-row { display:flex; flex-wrap:wrap; gap:8px; }
 .color-row>button,.custom-color { width:27px; height:27px; border-radius:50%; border:2px solid #181818; outline:1px solid #393939; cursor:pointer; }
 .color-row>button.selected { outline:2px solid #fff; outline-offset:2px; }

@@ -49,6 +49,8 @@ type StageProps = {
   textureRepeat: number;
   textureRotation: number;
   textureTint: number;
+  asciiCharacters: number;
+  asciiGlyphs: string;
   background: string;
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
@@ -72,25 +74,27 @@ type Runtime = {
   asciiLastFrame: number;
 };
 
-const asciiRamp = " .,:;irsXA253hMHGS#9B&@";
+const defaultAsciiRamp = " .,:;irsXA253hMHGS#9B&@";
 
-function asciiRowsFromPixels(data: Uint8ClampedArray, columns: number, rows: number) {
-  const lines:string[]=[];
+function asciiRowsFromPixels(data: Uint8ClampedArray, columns: number, rows: number, glyphs:string) {
+  const symbols=Array.from(glyphs.replace(/[\r\n\t]/g,"")).slice(0,96);
+  const ramp=symbols.length?symbols:Array.from(defaultAsciiRamp);
+  const lines:string[][]=[];
   for(let y=0;y<rows;y++){
-    let line="";
+    const line:string[]=[];
     for(let x=0;x<columns;x++){
       const offset=(y*columns+x)*4;
       const alpha=data[offset+3]/255;
-      if(alpha<.08){line+=" ";continue;}
+      if(alpha<.08){line.push(" ");continue;}
       const luminance=(data[offset]*.2126+data[offset+1]*.7152+data[offset+2]*.0722)/255;
-      line+=asciiRamp[Math.min(asciiRamp.length-1,Math.floor(luminance*(asciiRamp.length-1)))];
+      line.push(ramp[Math.min(ramp.length-1,Math.floor(luminance*(ramp.length-1)))]);
     }
-    lines.push(line.trimEnd());
+    lines.push(line);
   }
   return lines;
 }
 
-function renderAscii(runtime:Runtime,width:number,height:number,backgroundMode:"scene"|"transparent"|"opaque",target=runtime.asciiCanvas,columns=Math.max(48,Math.min(150,Math.round(width/7)))){
+function renderAscii(runtime:Runtime,width:number,height:number,backgroundMode:"scene"|"transparent"|"opaque",glyphs:string,target=runtime.asciiCanvas,columns=Math.max(40,Math.min(220,Math.round(width/7)))){
   const {renderer,scene,camera,model,shadowFloor,asciiSample}=runtime;
   const oldBackground=scene.background;
   const oldFloorVisible=shadowFloor.visible;
@@ -118,7 +122,7 @@ function renderAscii(runtime:Runtime,width:number,height:number,backgroundMode:"
   sampleContext.clearRect(0,0,columns,rows);
   sampleContext.drawImage(renderer.domElement,0,0,columns,rows);
   const pixels=sampleContext.getImageData(0,0,columns,rows).data;
-  const lines=asciiRowsFromPixels(pixels,columns,rows);
+  const lines=asciiRowsFromPixels(pixels,columns,rows,glyphs);
   const cellWidth=outputWidth/columns;
   const cellHeight=outputHeight/rows;
   context.font=`${Math.ceil(cellHeight*1.12)}px "JetBrains Mono",monospace`;
@@ -134,7 +138,7 @@ function renderAscii(runtime:Runtime,width:number,height:number,backgroundMode:"
   scene.background=oldBackground;
   shadowFloor.visible=oldFloorVisible;
   model.visible=oldModelVisible;
-  return lines.join("\n");
+  return lines.map(line=>line.join("").trimEnd()).join("\n");
 }
 
 const demoPoints = [[.5,.03],[.61,.34],[.94,.23],[.72,.51],[.98,.66],[.64,.65],[.66,.98],[.49,.72],[.27,.96],[.34,.63],[.02,.58],[.31,.43],[.12,.16],[.44,.34]];
@@ -483,7 +487,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       runtime.camera.updateProjectionMatrix();
       const ascii=latestPropsRef.current.material==="ASCII";
       const output=ascii?document.createElement("canvas"):runtime.renderer.domElement;
-      if(ascii)renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",output,180);
+      if(ascii){const current=latestPropsRef.current;renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",current.asciiGlyphs,output,current.asciiCharacters);}
       else{runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;runtime.renderer.render(runtime.scene,runtime.camera);}
       output.toBlob((blob) => {
         if (blob) downloadBlob(blob, `${name}.png`);
@@ -502,7 +506,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const runtime=runtimeRef.current;if(!runtime)return;
       const host=runtime.renderer.domElement.parentElement!;
       const {width,height}=host.getBoundingClientRect();
-      const text=renderAscii(runtime,width,height,"transparent",document.createElement("canvas"),120);
+      const current=latestPropsRef.current;
+      const text=renderAscii(runtime,width,height,"transparent",current.asciiGlyphs,document.createElement("canvas"),current.asciiCharacters);
       downloadBlob(new Blob([`${text}\n`],{type:"text/plain;charset=utf-8"}),`${name}.txt`);
     },
   }));
@@ -567,7 +572,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         asciiCanvas.style.display="block";
         if(time-runtime.asciiLastFrame>42){
           const {width,height}=host.getBoundingClientRect();
-          renderAscii(runtime,width,height,"scene");
+          const current=latestPropsRef.current;
+          renderAscii(runtime,width,height,"scene",current.asciiGlyphs,runtime.asciiCanvas,current.asciiCharacters);
           runtime.asciiLastFrame=time;
         }
       }else{

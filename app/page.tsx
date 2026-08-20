@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
 
 type Material = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome" | "ASCII";
-type ShapeParams = { thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number };
+type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
+type ShapeParams = { thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
 type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[] };
 
-const defaultShapeParams:ShapeParams={thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88};
+const defaultShapeParams:ShapeParams={thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88,asciiCharacters:90,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
 
 const materials: { name: Material; note: string }[] = [
   { name: "Gloss", note: "High shine" },
@@ -28,6 +29,13 @@ const materials: { name: Material; note: string }[] = [
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
 const textureMaterials: Material[] = ["Wood","Stone","Marble","Leather","Concrete"];
 const backgrounds = ["Noir","Sky","Sunset","Gallery","Acid"];
+const asciiCharacterSets:Record<Exclude<AsciiCharacterSet,"Custom Set">,string>={
+  Letters:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  Numbers:"0123456789",
+  "Letters + Numbers":"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  "Arrows & Chevrons":"‹«←↖↑↗→↘↓↙»›<^>⌃⌄",
+  "Math & Symbols":"·−+×÷=≠≈<>≤≥∞∑∏√∫∆∇∂%#*&@",
+};
 const publicAsset = (path:string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/,"")}`;
 const googleFonts = [
   {name:"Inter",family:"Inter",url:publicAsset("fonts/inter.ttf")},
@@ -114,6 +122,9 @@ export default function Home() {
   const [textureRepeat, setTextureRepeat] = useState(2);
   const [textureRotation, setTextureRotation] = useState(0);
   const [textureTint, setTextureTint] = useState(0);
+  const [asciiCharacters,setAsciiCharacters]=useState(90);
+  const [asciiCharacterSet,setAsciiCharacterSet]=useState<AsciiCharacterSet>("Letters + Numbers");
+  const [asciiCustomSet,setAsciiCustomSet]=useState(" .:-=+*#%@");
   const [background, setBackground] = useState("None");
   const [rotation, setRotation] = useState({ x: -16, y: 28, z: -7 });
   const [triangles, setTriangles] = useState(0);
@@ -138,7 +149,8 @@ export default function Home() {
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
-  const currentParams:ShapeParams={thickness,segments,surfaceDetail,edge,mass,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency};
+  const currentParams:ShapeParams={thickness,segments,surfaceDetail,edge,mass,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
+  const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const paramsSignature=JSON.stringify(currentParams);
 
   useEffect(()=>{
@@ -224,7 +236,7 @@ export default function Home() {
   const moveAxisDrag=(event:React.PointerEvent<HTMLDivElement>)=>{const drag=axisDragRef.current;if(drag)updateAxis(drag.axis,Math.round((drag.startValue+(event.clientX-drag.startX)*.65)*10)/10);};
   const endAxisDrag=()=>{axisDragRef.current=null;};
 
-  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);}
+  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??90);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
   const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind==="text"?"text":"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
   const deleteShape=(id:string)=>{
@@ -249,7 +261,7 @@ export default function Home() {
 
   const resetGeometry = () => { setThickness(42); setSegments(18); setSurfaceDetail(3); setEdge(24); setMass(0); };
   const resetDeform = () => { setBend(0); setBulge(0); setTaper(0); setTwist(0); };
-  const resetMaterial = () => { setMaterial("Gloss"); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setGlassIor(1.5); setGlassTransparency(88); };
+  const resetMaterial = () => { setMaterial("Gloss"); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setGlassIor(1.5); setGlassTransparency(88); setAsciiCharacters(90); setAsciiCharacterSet("Letters + Numbers"); setAsciiCustomSet(" .:-=+*#%@"); };
   const resetAppearance = () => { setColor("#E0E0E0"); setHexDraft("#E0E0E0"); setColorOpacity(100); setRoughness(18); };
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
@@ -280,7 +292,7 @@ export default function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} thickness={thickness} material={material} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} thickness={thickness} material={material} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>Building geometry</b><small>Interface stays responsive</small></div>}
             <div className="drag-hint"><span>↔</span> Drag to orbit · Scroll to zoom</div>
           </div>
@@ -326,6 +338,12 @@ export default function Home() {
                 <RangeControl label="Color overlay" value={textureTint} min={0} max={100} suffix="%" onChange={setTextureTint}/>
               </div>}
               {material==="Glass"&&<div className="texture-controls glass-controls"><div className="texture-credit"><span>GLASS</span> Physical refraction</div><RangeControl label="Refraction (IOR)" value={glassIor} min={1} max={2.33} step={.01} onChange={setGlassIor}/><RangeControl label="Transparency" value={glassTransparency} min={0} max={100} suffix="%" onChange={setGlassTransparency}/></div>}
+              {material==="ASCII"&&<div className="texture-controls ascii-controls">
+                <div className="texture-credit"><span>ASCII</span> Real-time character render</div>
+                <RangeControl label="Characters" value={asciiCharacters} min={40} max={220} onChange={setAsciiCharacters}/>
+                <label className="ascii-set-control"><span>Character Set</span><select aria-label="ASCII character set" value={asciiCharacterSet} onChange={event=>setAsciiCharacterSet(event.target.value as AsciiCharacterSet)}>{(["Letters","Numbers","Letters + Numbers","Arrows & Chevrons","Math & Symbols","Custom Set"] as AsciiCharacterSet[]).map(option=><option key={option}>{option}</option>)}</select></label>
+                {asciiCharacterSet==="Custom Set"&&<label className="ascii-set-control"><span>Custom Set</span><input aria-label="Custom ASCII characters" value={asciiCustomSet} maxLength={96} placeholder=" .:-=+*#%@" onChange={event=>setAsciiCustomSet(event.target.value.slice(0,96))}/><small>{Array.from(asciiCustomSet).length || "Default ramp"}</small></label>}
+              </div>}
             </div>
           </details>
 
