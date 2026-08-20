@@ -274,7 +274,7 @@ function loadFont(url: string) {
 async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]> {
   if (!fontCache.has(fontUrl)) fontCache.set(fontUrl, loadFont(fontUrl));
   const font = await fontCache.get(fontUrl)!;
-  const fallbackUrl="/fonts/inter.ttf";
+  const fallbackUrl=`${import.meta.env.BASE_URL}fonts/inter.ttf`;
   if (!fontCache.has(fallbackUrl)) fontCache.set(fallbackUrl, loadFont(fallbackUrl));
   const fallback = await fontCache.get(fallbackUrl)!;
   const lines = text.split(/\r?\n/).slice(0, 5);
@@ -337,11 +337,11 @@ async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]>
 }
 
 const textureAssets: Record<string, [string, string]> = {
-  Wood:["/textures/wood.jpg","/textures/wood-normal.jpg"],
-  Stone:["/textures/stone.jpg","/textures/stone-normal.jpg"],
-  Marble:["/textures/marble.jpg","/textures/marble-normal.jpg"],
-  Leather:["/textures/leather.jpg","/textures/leather-normal.jpg"],
-  Concrete:["/textures/concrete.jpg","/textures/concrete-normal.jpg"],
+  Wood:[`${import.meta.env.BASE_URL}textures/wood.jpg`,`${import.meta.env.BASE_URL}textures/wood-normal.jpg`],
+  Stone:[`${import.meta.env.BASE_URL}textures/stone.jpg`,`${import.meta.env.BASE_URL}textures/stone-normal.jpg`],
+  Marble:[`${import.meta.env.BASE_URL}textures/marble.jpg`,`${import.meta.env.BASE_URL}textures/marble-normal.jpg`],
+  Leather:[`${import.meta.env.BASE_URL}textures/leather.jpg`,`${import.meta.env.BASE_URL}textures/leather-normal.jpg`],
+  Concrete:[`${import.meta.env.BASE_URL}textures/concrete.jpg`,`${import.meta.env.BASE_URL}textures/concrete-normal.jpg`],
 };
 const textureCache = new Map<string, THREE.Texture>();
 

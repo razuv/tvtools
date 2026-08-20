@@ -27,16 +27,17 @@ const materials: { name: Material; note: string }[] = [
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
 const textureMaterials: Material[] = ["Wood","Stone","Marble","Leather","Concrete"];
 const backgrounds = ["Noir","Sky","Sunset","Gallery","Acid"];
+const publicAsset = (path:string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/,"")}`;
 const googleFonts = [
-  {name:"Inter",family:"Studio Inter",url:"/fonts/inter.ttf"},
-  {name:"Space Grotesk",family:"Studio Space",url:"/fonts/space-grotesk.ttf"},
-  {name:"Playfair Display",family:"Studio Playfair",url:"/fonts/playfair-display.ttf"},
-  {name:"Roboto Mono",family:"Studio Mono",url:"/fonts/roboto-mono.ttf"},
-  {name:"Bebas Neue",family:"Studio Bebas",url:"/fonts/bebas-neue.ttf"},
-  {name:"Pacifico",family:"Studio Pacifico",url:"/fonts/pacifico.ttf"},
+  {name:"Inter",family:"Studio Inter",url:publicAsset("fonts/inter.ttf")},
+  {name:"Space Grotesk",family:"Studio Space",url:publicAsset("fonts/space-grotesk.ttf")},
+  {name:"Playfair Display",family:"Studio Playfair",url:publicAsset("fonts/playfair-display.ttf")},
+  {name:"Roboto Mono",family:"Studio Mono",url:publicAsset("fonts/roboto-mono.ttf")},
+  {name:"Bebas Neue",family:"Studio Bebas",url:publicAsset("fonts/bebas-neue.ttf")},
+  {name:"Pacifico",family:"Studio Pacifico",url:publicAsset("fonts/pacifico.ttf")},
 ];
 
-const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:"/rzw.svg",demo:true,kind:"image"};
+const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image"};
 const libraryDatabase="shape3d-studio-library";
 const libraryStore="state";
 
@@ -267,7 +268,7 @@ export default function Home() {
             <span className="upload-icon">↗</span><strong>Drop your shape</strong><small>SVG or PNG · max 12 MB</small>
           </button>:<div className="text-source"><label><span>Text</span><textarea aria-label="Text to extrude" maxLength={120} rows={3} value={textDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>Google Font</span><select aria-label="Google Font" value={fontDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setFontDraft(event.target.value)}>{googleFonts.map(font=><option key={font.url} value={font.url}>{font.name}</option>)}</select></label><button onClick={createTextShape}>Create text shape <span>↗</span></button><small>Open Font License · ⌘ Enter</small></div>}
           <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
-          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src="/rzw.svg" alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:item.demo?"Demo vector":"Imported image"}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
+          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src={publicAsset("rzw.svg")} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:item.demo?"Demo vector":"Imported image"}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
           <div className="tip"><span>i</span><p>{sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion."}</p></div>
         </aside>
 
