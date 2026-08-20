@@ -7,14 +7,30 @@ type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble"
 type Material = BuiltInMaterial | `Custom:${string}`;
 type GeometryMode = "Extrude" | "Revolve" | "Inflate";
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
-type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
+type Language = "en" | "ru";
+type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
 type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredCustomMaterial = Omit<CustomMaterial,"source">;
 type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
 
-const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88,asciiCharacters:90,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
+const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,glassIor:1.5,glassTransparency:88,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
+
+const ru:Record<string,string>={
+  "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Google Font":"Шрифт Google","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
+  "Text becomes real editable 3D outlines, including counters inside letters.":"Текст преобразуется в редактируемые 3D-контуры, включая полости внутри букв.","Transparent shapes with clean edges give the best extrusion.":"Прозрачные фигуры с чистыми краями дают лучший результат экструзии.",
+  "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","Drag to orbit · Scroll to zoom":"Перетаскивайте для вращения · Колесо для масштаба",
+  "Properties":"Параметры","Reset all":"Сбросить всё","Copy Properties":"Копировать параметры","Paste Properties":"Вставить параметры","Geometry":"Геометрия","Extrude":"Экструзия","Revolve":"Вращение","Inflate":"Надувание","Thickness":"Толщина","Segments":"Сегменты","Surface detail":"Детализация поверхности","Edge":"Фаска","Mass":"Масса","Inflation":"Надувание",
+  "Deform":"Деформация","Bend":"Изгиб","Bulge":"Выпуклость","Taper":"Сужение","Twist":"Скручивание","Material":"Материал","Surface":"Поверхность","High shine":"Глянец","Brushed":"Шлифованный","Clear":"Прозрачный","CC0 texture":"Текстура CC0","Soft matte":"Мягкий матовый","Mirror":"Зеркальный","Real-time text":"Текст в реальном времени",
+  "Drop JPG material":"Перетащите JPG-материал","Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB":"Рекомендуется: бесшовный квадрат 1024×1024, sRGB, ≤ 8 МБ","Custom diffuse / albedo":"Пользовательский diffuse / albedo","Texture by Poly Haven":"Текстура Poly Haven","Texture by ambientCG":"Текстура ambientCG","Repeat":"Повтор","Rotation":"Вращение","Color overlay":"Наложение цвета","Normal strength":"Сила рельефа","Physical refraction":"Физическая рефракция","Refraction (IOR)":"Рефракция (IOR)","Transparency":"Прозрачность",
+  "Characters":"Символы","Character Set":"Набор символов","Letters":"Буквы","Numbers":"Цифры","Letters + Numbers":"Буквы + цифры","Arrows & Chevrons":"Стрелки и шевроны","Math & Symbols":"Математика и символы","Custom Set":"Свой набор","Default ramp":"Стандартная шкала","Real-time character render":"Рендер символов в реальном времени",
+  "Appearance":"Внешний вид","Color":"Цвет","Roughness":"Шероховатость","Color opacity":"Прозрачность цвета","Lighting":"Освещение","Strength":"Яркость","Ambient":"Окружение","Shadow softness":"Мягкость тени","Shadow opacity":"Прозрачность тени","Depth":"Глубина","Soft shadow":"Мягкая тень","Background":"Фон","Scene":"Сцена","None":"Нет","Custom":"Пользовательский","Upload":"Загрузить","Noir":"Нуар","Sky":"Небо","Sunset":"Закат","Gallery":"Галерея","Acid":"Кислотный",
+  "Gloss":"Глянец","Metal":"Металл","Glass":"Стекло","Wood":"Дерево","Stone":"Камень","Marble":"Мрамор","Leather":"Кожа","Concrete":"Бетон","Rubber":"Резина","Clay":"Глина","Chrome":"Хром",
+  "Ready to export":"Готово к экспорту","Transparent background":"Прозрачный фон","Background included":"Фон включён","High quality":"Высокое качество","Transparent":"Прозрачный","Studio black":"Чёрный фон","Scene background":"Фон сцены","Interactive":"Интерактивный","ASCII graphic":"ASCII-графика","3D geometry":"3D-геометрия",
+  "Standard":"Стандарт","Diffuse":"Рассеянный","Top Left":"Сверху слева","Right":"Справа","Drag to position light":"Перетащите источник света","Playtools is available on desktop devices only.":"Playtools доступен только на десктопных устройствах.","INTERACTIVE EMBED":"ИНТЕРАКТИВНЫЙ EMBED","Put this shape anywhere.":"Разместите эту фигуру где угодно.","Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.":"Скопируйте код и вставьте его на сайт. Модель сохранит вращение, материал и цвет.","Copy embed code":"Скопировать embed-код",
+  "All parameters reset":"Все параметры сброшены","Background uploaded":"Фон загружен","Copy parameters first":"Сначала скопируйте параметры","Could not cache the shape library":"Не удалось сохранить библиотеку фигур","Could not read this JPG":"Не удалось прочитать JPG","Embed code copied":"Embed-код скопирован","Enter some text first":"Сначала введите текст","File is larger than 12 MB":"Файл больше 12 МБ","JPG materials only":"Поддерживаются только JPG-материалы","Material is larger than 8 MB":"Материал больше 8 МБ","Parameters copied":"Параметры скопированы","Parameters pasted":"Параметры вставлены","SVG and PNG files only":"Поддерживаются только SVG и PNG","Shape added to the library":"Фигура добавлена в библиотеку","Shape removed from the library":"Фигура удалена из библиотеки","Text shape added to the library":"Текстовая фигура добавлена в библиотеку","Transparent PNG exported":"Прозрачный PNG экспортирован","PNG with background exported":"PNG с фоном экспортирован","ASCII text exported":"ASCII-текст экспортирован","OBJ geometry exported":"OBJ-геометрия экспортирована"
+};
 
 const materials: { name: BuiltInMaterial; note: string }[] = [
   { name: "Gloss", note: "High shine" },
@@ -105,7 +121,7 @@ const lightPresets=[
   {name:"Right",x:8,y:1,z:4},
 ];
 
-function LightDirectionControl({x,y,z,onChange}:{x:number;y:number;z:number;onChange:(next:{x:number;y:number;z:number})=>void}){
+function LightDirectionControl({x,y,z,onChange,t}:{x:number;y:number;z:number;onChange:(next:{x:number;y:number;z:number})=>void;t:(value:string)=>string}){
   const move=(event:React.PointerEvent<HTMLDivElement>)=>{
     if(event.buttons===0&&event.type!=="pointerdown")return;
     const rect=event.currentTarget.getBoundingClientRect();
@@ -114,16 +130,17 @@ function LightDirectionControl({x,y,z,onChange}:{x:number;y:number;z:number;onCh
     onChange({x:Math.round(nextX*10)/10,y:Math.round(nextY*10)/10,z});
   };
   return <div className="light-editor">
-    <div className="light-presets">{lightPresets.map(preset=><button key={preset.name} className={Math.abs(x-preset.x)<.2&&Math.abs(y-preset.y)<.2&&Math.abs(z-preset.z)<.2?"active":""} onClick={()=>onChange(preset)}><i style={{"--lx":`${preset.x}px`,"--ly":`${-preset.y}px`} as React.CSSProperties}/><span>{preset.name}</span></button>)}</div>
+    <div className="light-presets">{lightPresets.map(preset=><button key={preset.name} className={Math.abs(x-preset.x)<.2&&Math.abs(y-preset.y)<.2&&Math.abs(z-preset.z)<.2?"active":""} onClick={()=>onChange(preset)}><i style={{"--lx":`${preset.x}px`,"--ly":`${-preset.y}px`} as React.CSSProperties}/><span>{t(preset.name)}</span></button>)}</div>
     <div className="light-pad" onPointerDown={event=>{event.currentTarget.setPointerCapture(event.pointerId);move(event);}} onPointerMove={move}>
       <div className="light-preview" style={{"--light-x":`${x*2.2}px`,"--light-y":`${-y*2.2}px`} as React.CSSProperties}/>
       <span className="light-handle" style={{left:`${(x+10)*5}%`,top:`${(10-y)*5}%`}}/>
-      <small>Drag to position light</small>
+      <small>{t("Drag to position light")}</small>
     </div>
   </div>;
 }
 
 export default function Home() {
+  const [language,setLanguage]=useState<Language>("en");
   const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape]);
   const [customMaterials,setCustomMaterials]=useState<CustomMaterial[]>([]);
   const [activeShapeId, setActiveShapeId] = useState("demo-rzw");
@@ -161,7 +178,8 @@ export default function Home() {
   const [textureRepeat, setTextureRepeat] = useState(2);
   const [textureRotation, setTextureRotation] = useState(0);
   const [textureTint, setTextureTint] = useState(0);
-  const [asciiCharacters,setAsciiCharacters]=useState(90);
+  const [normalStrength,setNormalStrength]=useState(135);
+  const [asciiCharacters,setAsciiCharacters]=useState(128);
   const [asciiCharacterSet,setAsciiCharacterSet]=useState<AsciiCharacterSet>("Letters + Numbers");
   const [asciiCustomSet,setAsciiCustomSet]=useState(" .:-=+*#%@");
   const [background, setBackground] = useState("None");
@@ -191,12 +209,17 @@ export default function Home() {
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
-  const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
+  const t=(value:string)=>language==="ru"?(ru[value]??value):value;
+  const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
   const customMaterialUrl=activeCustomMaterial?.source;
   const isTexturedMaterial=textureMaterials.includes(material as BuiltInMaterial)||Boolean(activeCustomMaterial);
+  const hasNormalMap=textureMaterials.includes(material as BuiltInMaterial);
   const paramsSignature=JSON.stringify(currentParams);
+
+  useEffect(()=>{const saved=window.localStorage.getItem("playtools-language");if(saved==="ru"||saved==="en")setLanguage(saved);},[]);
+  useEffect(()=>{window.localStorage.setItem("playtools-language",language);document.documentElement.lang=language;},[language]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -239,7 +262,7 @@ export default function Home() {
   },[shapeItems,customMaterials,activeShapeId,libraryReady]);
 
   const flash = (message: string) => {
-    setToast(message);
+    setToast(t(message));
     window.setTimeout(() => setToast(""), 2200);
   };
 
@@ -299,7 +322,7 @@ export default function Home() {
   const moveAxisDrag=(event:React.PointerEvent<HTMLDivElement>)=>{const drag=axisDragRef.current;if(drag)updateAxis(drag.axis,Math.round((drag.startValue+(event.clientX-drag.startX)*.65)*10)/10);};
   const endAxisDrag=()=>{axisDragRef.current=null;};
 
-  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setInflateAmount(params.inflateAmount??55);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??90);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");}
+  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setInflateAmount(params.inflateAmount??55);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setNormalStrength(params.normalStrength??135);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??128);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
   const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind==="text"?"text":"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
   const deleteShape=(id:string)=>{
@@ -324,7 +347,7 @@ export default function Home() {
 
   const resetGeometry = () => { setGeometryMode("Extrude");setThickness(42); setSegments(18); setSurfaceDetail(3); setEdge(24); setMass(0);setInflateAmount(55); };
   const resetDeform = () => { setBend(0); setBulge(0); setTaper(0); setTwist(0); };
-  const resetMaterial = () => { setMaterial("Gloss"); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setGlassIor(1.5); setGlassTransparency(88); setAsciiCharacters(90); setAsciiCharacterSet("Letters + Numbers"); setAsciiCustomSet(" .:-=+*#%@"); };
+  const resetMaterial = () => { setMaterial("Gloss"); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setNormalStrength(135); setGlassIor(1.5); setGlassTransparency(88); setAsciiCharacters(128); setAsciiCharacterSet("Letters + Numbers"); setAsciiCustomSet(" .:-=+*#%@"); };
   const resetAppearance = () => { setColor("#E0E0E0"); setHexDraft("#E0E0E0"); setColorOpacity(100); setRoughness(18); };
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
@@ -338,27 +361,27 @@ export default function Home() {
     <main className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
       <section className="workspace">
         <aside className="panel import-panel">
-          <div className="panel-heading"><span>01</span><h2>Source</h2></div>
-          <div className="source-tabs"><button className={sourceMode==="image"?"active":""} onClick={()=>setSourceMode("image")}>Image</button><button className={sourceMode==="text"?"active":""} onClick={()=>setSourceMode("text")}>Text</button></div>
+          <div className="panel-heading"><span>01</span><h2>{t("Source")}</h2></div>
+          <div className="source-tabs"><button className={sourceMode==="image"?"active":""} onClick={()=>setSourceMode("image")}>{t("Image")}</button><button className={sourceMode==="text"?"active":""} onClick={()=>setSourceMode("text")}>{t("Text")}</button></div>
           {sourceMode==="image"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
-            <span className="upload-icon">↗</span><strong>Drop your shape</strong><small>SVG or PNG · max 12 MB</small>
-          </button>:<div className="text-source"><label><span>Text</span><textarea aria-label="Text to extrude" maxLength={120} rows={3} value={textDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>Google Font</span><select aria-label="Google Font" value={fontDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setFontDraft(event.target.value)}>{googleFonts.map(font=><option key={font.url} value={font.url}>{font.name}</option>)}</select></label><button onClick={createTextShape}>Create text shape <span>↗</span></button><small>Open Font License · ⌘ Enter</small></div>}
+            <span className="upload-icon">↗</span><strong>{t("Drop your shape")}</strong><small>SVG or PNG · max 12 MB</small>
+          </button>:<div className="text-source"><label><span>{t("Text")}</span><textarea aria-label={t("Text")} maxLength={120} rows={3} value={textDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>{t("Google Font")}</span><select aria-label={t("Google Font")} value={fontDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setFontDraft(event.target.value)}>{googleFonts.map(font=><option key={font.url} value={font.url}>{font.name}</option>)}</select></label><button onClick={createTextShape}>{t("Create text shape")} <span>↗</span></button><small>Open Font License · ⌘ Enter</small></div>}
           <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
-          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src={publicAsset("rzw.svg")} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:item.demo?"Demo vector":"Imported image"}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
-          <div className="tip"><span>i</span><p>{sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion."}</p></div>
+          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src={publicAsset("rzw.svg")} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:t(item.demo?"Demo vector":"Imported image")}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
+          <div className="tip"><span>i</span><p>{t(sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion.")}</p></div>
           <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
         </aside>
 
         <section className="stage" aria-label="3D preview">
           <div className="stage-top">
-            <div><span>WEBGL LIVE</span><b>{triangles.toLocaleString("en-US")} TRIANGLES</b></div>
-            <div className="stage-actions"><button onClick={undo} disabled={historyIndexRef.current<=0}>↶ Undo</button><button onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}>↷ Redo</button><button onClick={resetView} aria-label="Reset view">↺ Reset view</button><button onClick={()=>setInterfaceHidden(true)}>□ Hide UI</button></div>
+            <div><span>WEBGL LIVE</span><b>{triangles.toLocaleString(language==="ru"?"ru-RU":"en-US")} {t("TRIANGLES")}</b></div>
+            <div className="stage-tools"><div className="language-toggle" aria-label="Language"><button className={language==="en"?"active":""} onClick={()=>setLanguage("en")}>EN</button><button className={language==="ru"?"active":""} onClick={()=>setLanguage("ru")}>RU</button></div><div className="stage-actions"><button onClick={undo} disabled={historyIndexRef.current<=0}>↶ {t("Undo")}</button><button onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}>↷ {t("Redo")}</button><button onClick={resetView} aria-label={t("Reset view")}>↺ {t("Reset view")}</button><button onClick={()=>setInterfaceHidden(true)}>□ {t("Hide UI")}</button></div></div>
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
-            {isRendering&&<div className="model-loader" role="status"><span/><b>Building geometry</b><small>Interface stays responsive</small></div>}
-            <div className="drag-hint"><span>↔</span> Drag to orbit · Scroll to zoom</div>
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalStrength} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            {isRendering&&<div className="model-loader" role="status"><span/><b>{t("Building geometry")}</b><small>{t("Interface stays responsive")}</small></div>}
+            <div className="drag-hint"><span>↔</span> {t("Drag to orbit · Scroll to zoom")}</div>
           </div>
           <div className="axis-row">
             {(["x", "y", "z"] as const).map(axis=><div key={axis} className="axis-control" onPointerDown={event=>startAxisDrag(axis,event)} onPointerMove={moveAxisDrag} onPointerUp={endAxisDrag} onPointerCancel={endAxisDrag}><span>{axis.toUpperCase()}</span><input aria-label={`${axis.toUpperCase()} rotation`} type="number" min={-360} max={360} step={1} value={Math.round(rotation[axis]*10)/10} onChange={event=>updateAxis(axis,+event.target.value)}/><i>°</i></div>)}
@@ -366,86 +389,87 @@ export default function Home() {
         </section>
 
         <aside className="panel properties-panel">
-          <div className="panel-heading properties-heading"><span>02</span><h2>Properties</h2><button className="reset-all" onClick={resetAll}>↺ Reset all</button></div>
-          <div className="parameter-clipboard"><button onClick={copyParams}>Copy Properties</button><button onClick={pasteParams}>Paste Properties</button></div>
+          <div className="panel-heading properties-heading"><span>02</span><h2>{t("Properties")}</h2><button className="reset-all" onClick={resetAll}>↺ {t("Reset all")}</button></div>
+          <div className="parameter-clipboard"><button onClick={copyParams}>{t("Copy Properties")}</button><button onClick={pasteParams}>{t("Paste Properties")}</button></div>
 
           <details className="property-section" open>
-            <summary><span>Geometry</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
+            <summary><span>{t("Geometry")}</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
             <div className="section-body stack-controls">
-              <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><i className={mode.toLowerCase()}/><span>{mode}{mode!=="Extrude"&&<em>BETA</em>}</span></button>)}</div>
-              {geometryMode!=="Revolve"&&<RangeControl label="Thickness" value={thickness} min={8} max={300} suffix="mm" onChange={setThickness}/>}
-              <RangeControl label="Segments" value={segments} min={3} max={1024} onChange={setSegments}/>
-              <RangeControl label="Surface detail" value={surfaceDetail} min={1} max={5} onChange={setSurfaceDetail}/>
-              {geometryMode!=="Revolve"&&<RangeControl label="Edge" value={edge} min={0} max={300} suffix="%" onChange={setEdge}/>}
-              {geometryMode==="Extrude"&&<RangeControl label="Mass" value={mass} min={0} max={250} suffix="%" onChange={setMass}/>}
-              {geometryMode==="Inflate"&&<RangeControl label="Inflation" value={inflateAmount} min={0} max={200} suffix="%" onChange={setInflateAmount}/>}
+              <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><i className={mode.toLowerCase()}/><span>{t(mode)}{mode!=="Extrude"&&<em>BETA</em>}</span></button>)}</div>
+              {geometryMode!=="Revolve"&&<RangeControl label={t("Thickness")} value={thickness} min={1} max={300} suffix={language==="ru"?"мм":"mm"} onChange={setThickness}/>}
+              <RangeControl label={t("Segments")} value={segments} min={3} max={1024} onChange={setSegments}/>
+              <RangeControl label={t("Surface detail")} value={surfaceDetail} min={1} max={5} onChange={setSurfaceDetail}/>
+              {geometryMode!=="Revolve"&&<RangeControl label={t("Edge")} value={edge} min={0} max={300} suffix="%" onChange={setEdge}/>}
+              {geometryMode==="Extrude"&&<RangeControl label={t("Mass")} value={mass} min={0} max={250} suffix="%" onChange={setMass}/>}
+              {geometryMode==="Inflate"&&<RangeControl label={t("Inflation")} value={inflateAmount} min={0} max={200} suffix="%" onChange={setInflateAmount}/>}
             </div>
           </details>
 
           <details className="property-section" open>
-            <summary><span>Deform</span><button onClick={(e)=>{e.preventDefault();resetDeform();}} aria-label="Reset deformation">↺</button></summary>
+            <summary><span>{t("Deform")}</span><button onClick={(e)=>{e.preventDefault();resetDeform();}} aria-label="Reset deformation">↺</button></summary>
             <div className="section-body deform-grid">
-              <RangeControl label="Bend" value={bend} min={-120} max={120} suffix="°" onChange={setBend}/>
-              <RangeControl label="Bulge" value={bulge} min={-50} max={100} suffix="%" onChange={setBulge}/>
-              <RangeControl label="Taper" value={taper} min={-100} max={100} suffix="%" onChange={setTaper}/>
-              <RangeControl label="Twist" value={twist} min={-180} max={180} suffix="°" onChange={setTwist}/>
+              <RangeControl label={t("Bend")} value={bend} min={-120} max={120} suffix="°" onChange={setBend}/>
+              <RangeControl label={t("Bulge")} value={bulge} min={-50} max={100} suffix="%" onChange={setBulge}/>
+              <RangeControl label={t("Taper")} value={taper} min={-100} max={100} suffix="%" onChange={setTaper}/>
+              <RangeControl label={t("Twist")} value={twist} min={-180} max={180} suffix="°" onChange={setTwist}/>
             </div>
           </details>
 
           <details className="property-section" open>
-            <summary><span>Material</span><button onClick={(e)=>{e.preventDefault();resetMaterial();}} aria-label="Reset material">↺</button></summary>
+            <summary><span>{t("Material")}</span><button onClick={(e)=>{e.preventDefault();resetMaterial();}} aria-label="Reset material">↺</button></summary>
             <div className="section-body">
-              <div className="control-row"><span>Surface</span><output>{activeCustomMaterial?.name??material}</output></div>
-              <div className="materials">{materials.map((item) => <button key={item.name} className={material === item.name ? "active" : ""} onClick={() => setMaterial(item.name)}><span className={`material-ball ${item.name.toLowerCase()}`} /><b>{item.name}</b><small>{item.note}</small></button>)}{customMaterials.map(item=><button key={item.id} className={material===`Custom:${item.id}`?"active":""} onClick={()=>setMaterial(`Custom:${item.id}`)}><span className="material-ball custom-jpg" style={{backgroundImage:`url(${item.source})`}}/><b>{item.name}</b><small>{item.width}×{item.height} JPG</small></button>)}</div>
-              <button className="material-drop" onClick={()=>materialRef.current?.click()} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();void importMaterial(event.dataTransfer.files[0]);}}><span>＋</span><strong>Drop JPG material</strong><small>Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB</small></button>
+              <div className="control-row"><span>{t("Surface")}</span><output>{activeCustomMaterial?.name??t(material)}</output></div>
+              <div className="materials">{materials.map((item) => <button key={item.name} className={material === item.name ? "active" : ""} onClick={() => setMaterial(item.name)}><span className={`material-ball ${item.name.toLowerCase()}`} /><b>{t(item.name)}</b><small>{t(item.note)}</small></button>)}{customMaterials.map(item=><button key={item.id} className={material===`Custom:${item.id}`?"active":""} onClick={()=>setMaterial(`Custom:${item.id}`)}><span className="material-ball custom-jpg" style={{backgroundImage:`url(${item.source})`}}/><b>{item.name}</b><small>{item.width}×{item.height} JPG</small></button>)}</div>
+              <button className="material-drop" onClick={()=>materialRef.current?.click()} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();void importMaterial(event.dataTransfer.files[0]);}}><span>＋</span><strong>{t("Drop JPG material")}</strong><small>{t("Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB")}</small></button>
               <input ref={materialRef} className="file-input" type="file" accept=".jpg,.jpeg,image/jpeg" onChange={event=>void importMaterial(event.target.files?.[0])}/>
               {isTexturedMaterial && <div className="texture-controls">
-                <div className="texture-credit"><span>{activeCustomMaterial?"JPG":"CC0"}</span> {activeCustomMaterial?"Custom diffuse / albedo":"Texture by Poly Haven"}</div>
-                <RangeControl label="Repeat" value={textureRepeat} min={.5} max={8} step={.5} suffix="×" onChange={setTextureRepeat}/>
-                <RangeControl label="Rotation" value={textureRotation} min={-180} max={180} suffix="°" onChange={setTextureRotation}/>
-                <RangeControl label="Color overlay" value={textureTint} min={0} max={100} suffix="%" onChange={setTextureTint}/>
+                <div className="texture-credit"><span>{activeCustomMaterial?"JPG":"CC0"}</span> {t(activeCustomMaterial?"Custom diffuse / albedo":material==="Rubber"?"Texture by ambientCG":"Texture by Poly Haven")}</div>
+                <RangeControl label={t("Repeat")} value={textureRepeat} min={.5} max={8} step={.5} suffix="×" onChange={setTextureRepeat}/>
+                <RangeControl label={t("Rotation")} value={textureRotation} min={-180} max={180} suffix="°" onChange={setTextureRotation}/>
+                <RangeControl label={t("Color overlay")} value={textureTint} min={0} max={100} suffix="%" onChange={setTextureTint}/>
+                {hasNormalMap&&<RangeControl label={t("Normal strength")} value={normalStrength} min={0} max={250} suffix="%" onChange={setNormalStrength}/>}
               </div>}
-              {material==="Glass"&&<div className="texture-controls glass-controls"><div className="texture-credit"><span>GLASS</span> Physical refraction</div><RangeControl label="Refraction (IOR)" value={glassIor} min={1} max={2.33} step={.01} onChange={setGlassIor}/><RangeControl label="Transparency" value={glassTransparency} min={0} max={100} suffix="%" onChange={setGlassTransparency}/></div>}
+              {material==="Glass"&&<div className="texture-controls glass-controls"><div className="texture-credit"><span>GLASS</span> {t("Physical refraction")}</div><RangeControl label={t("Refraction (IOR)")} value={glassIor} min={1} max={2.33} step={.01} onChange={setGlassIor}/><RangeControl label={t("Transparency")} value={glassTransparency} min={0} max={100} suffix="%" onChange={setGlassTransparency}/></div>}
               {material==="ASCII"&&<div className="texture-controls ascii-controls">
-                <div className="texture-credit"><span>ASCII</span> Real-time character render</div>
-                <RangeControl label="Characters" value={asciiCharacters} min={40} max={220} onChange={setAsciiCharacters}/>
-                <label className="ascii-set-control"><span>Character Set</span><select aria-label="ASCII character set" value={asciiCharacterSet} onChange={event=>setAsciiCharacterSet(event.target.value as AsciiCharacterSet)}>{(["Letters","Numbers","Letters + Numbers","Arrows & Chevrons","Math & Symbols","Custom Set"] as AsciiCharacterSet[]).map(option=><option key={option}>{option}</option>)}</select></label>
-                {asciiCharacterSet==="Custom Set"&&<label className="ascii-set-control"><span>Custom Set</span><input aria-label="Custom ASCII characters" value={asciiCustomSet} maxLength={96} placeholder=" .:-=+*#%@" onChange={event=>setAsciiCustomSet(event.target.value.slice(0,96))}/><small>{Array.from(asciiCustomSet).length || "Default ramp"}</small></label>}
+                <div className="texture-credit"><span>ASCII</span> {t("Real-time character render")}</div>
+                <RangeControl label={t("Characters")} value={asciiCharacters} min={40} max={220} onChange={setAsciiCharacters}/>
+                <label className="ascii-set-control"><span>{t("Character Set")}</span><select aria-label="ASCII character set" value={asciiCharacterSet} onChange={event=>setAsciiCharacterSet(event.target.value as AsciiCharacterSet)}>{(["Letters","Numbers","Letters + Numbers","Arrows & Chevrons","Math & Symbols","Custom Set"] as AsciiCharacterSet[]).map(option=><option key={option} value={option}>{t(option)}</option>)}</select></label>
+                {asciiCharacterSet==="Custom Set"&&<label className="ascii-set-control"><span>{t("Custom Set")}</span><input aria-label="Custom ASCII characters" value={asciiCustomSet} maxLength={96} placeholder=" .:-=+*#%@" onChange={event=>setAsciiCustomSet(event.target.value.slice(0,96))}/><small>{Array.from(asciiCustomSet).length || t("Default ramp")}</small></label>}
               </div>}
             </div>
           </details>
 
           <details className="property-section" open>
-            <summary><span>Appearance</span><button onClick={(e)=>{e.preventDefault();resetAppearance();}} aria-label="Reset appearance">↺</button></summary>
+            <summary><span>{t("Appearance")}</span><button onClick={(e)=>{e.preventDefault();resetAppearance();}} aria-label="Reset appearance">↺</button></summary>
             <div className="section-body">
-              <div className="control-row"><span>Color</span><output>{color.toUpperCase()}</output></div>
+              <div className="control-row"><span>{t("Color")}</span><output>{color.toUpperCase()}</output></div>
               <div className="color-row">{paletteColors.map((item) => <button key={item} aria-label={`Set color ${item}`} className={color === item ? "selected" : ""} style={{ background: item }} onClick={() => chooseColor(item)} />)}<label className="custom-color">+<input aria-label="Custom color" type="color" value={color} onChange={(e) => chooseColor(e.target.value)} onBlur={()=>chooseColor(color,true)} /></label></div>
               <label className="hex-control"><span>HEX</span><input aria-label="HEX color" value={hexDraft} maxLength={7} spellCheck={false} onChange={(e)=>setHexDraft(e.target.value.toUpperCase())} onBlur={commitHex} onKeyDown={(e)=>{if(e.key==="Enter"){commitHex();e.currentTarget.blur();}}}/></label>
               <div className="mini-controls">
-                <RangeControl label="Roughness" value={roughness} min={0} max={100} suffix="%" onChange={setRoughness}/>
-                <RangeControl label="Color opacity" value={colorOpacity} min={0} max={100} suffix="%" onChange={setColorOpacity}/>
+                <RangeControl label={t("Roughness")} value={roughness} min={0} max={100} suffix="%" onChange={setRoughness}/>
+                <RangeControl label={t("Color opacity")} value={colorOpacity} min={0} max={100} suffix="%" onChange={setColorOpacity}/>
               </div>
             </div>
           </details>
 
           <details className="property-section" open>
-            <summary><span>Lighting</span><button onClick={(e)=>{e.preventDefault();resetLighting();}} aria-label="Reset lighting">↺</button></summary>
+            <summary><span>{t("Lighting")}</span><button onClick={(e)=>{e.preventDefault();resetLighting();}} aria-label="Reset lighting">↺</button></summary>
             <div className="section-body stack-controls">
-              <LightDirectionControl x={lightX} y={lightY} z={lightZ} onChange={next=>{setLightX(next.x);setLightY(next.y);setLightZ(next.z);}}/>
-              <RangeControl label="Strength" value={light} min={0} max={300} suffix="%" onChange={setLight}/>
-              <RangeControl label="Ambient" value={ambientLight} min={0} max={150} suffix="%" onChange={setAmbientLight}/>
-              <RangeControl label="Shadow softness" value={shadowSoftness} min={0} max={100} suffix="%" onChange={setShadowSoftness}/>
-              <RangeControl label="Shadow opacity" value={shadowOpacity} min={0} max={70} suffix="%" onChange={setShadowOpacity}/>
-              <div className="light-position"><RangeControl label="X" value={lightX} min={-10} max={10} step={.1} onChange={setLightX}/><RangeControl label="Y" value={lightY} min={-10} max={10} step={.1} onChange={setLightY}/><RangeControl label="Depth" value={lightZ} min={-10} max={10} step={.1} onChange={setLightZ}/></div>
-              <label className="switch-row"><span>Soft shadow</span><input type="checkbox" checked={shadows} onChange={(e)=>setShadows(e.target.checked)}/><i /></label>
+              <LightDirectionControl x={lightX} y={lightY} z={lightZ} t={t} onChange={next=>{setLightX(next.x);setLightY(next.y);setLightZ(next.z);}}/>
+              <RangeControl label={t("Strength")} value={light} min={0} max={300} suffix="%" onChange={setLight}/>
+              <RangeControl label={t("Ambient")} value={ambientLight} min={0} max={150} suffix="%" onChange={setAmbientLight}/>
+              <RangeControl label={t("Shadow softness")} value={shadowSoftness} min={0} max={100} suffix="%" onChange={setShadowSoftness}/>
+              <RangeControl label={t("Shadow opacity")} value={shadowOpacity} min={0} max={70} suffix="%" onChange={setShadowOpacity}/>
+              <div className="light-position"><RangeControl label="X" value={lightX} min={-10} max={10} step={.1} onChange={setLightX}/><RangeControl label="Y" value={lightY} min={-10} max={10} step={.1} onChange={setLightY}/><RangeControl label={t("Depth")} value={lightZ} min={-10} max={10} step={.1} onChange={setLightZ}/></div>
+              <label className="switch-row"><span>{t("Soft shadow")}</span><input type="checkbox" checked={shadows} onChange={(e)=>setShadows(e.target.checked)}/><i /></label>
             </div>
           </details>
 
           <details className="property-section" open>
-            <summary><span>Background</span><button onClick={(e)=>{e.preventDefault();resetBackground();}} aria-label="Reset background">↺</button></summary>
+            <summary><span>{t("Background")}</span><button onClick={(e)=>{e.preventDefault();resetBackground();}} aria-label="Reset background">↺</button></summary>
             <div className="section-body">
-              <div className="control-row"><span>Scene</span><output>{background.startsWith("blob:") ? "Custom" : background}</output></div>
-              <div className="backgrounds"><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span>×</span><small>None</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{item}</small></button>)}<button className={background.startsWith("blob:") ? "active upload-bg" : "upload-bg"} onClick={() => backgroundRef.current?.click()}><span>+</span><small>Upload</small></button></div>
+              <div className="control-row"><span>{t("Scene")}</span><output>{t(background.startsWith("blob:") ? "Custom" : background)}</output></div>
+              <div className="backgrounds"><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span>×</span><small>{t("None")}</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{t(item)}</small></button>)}<button className={background.startsWith("blob:") ? "active upload-bg" : "upload-bg"} onClick={() => backgroundRef.current?.click()}><span>+</span><small>{t("Upload")}</small></button></div>
               <input ref={backgroundRef} className="file-input" type="file" accept="image/*" onChange={(e) => importBackground(e.target.files?.[0])} />
             </div>
           </details>
@@ -453,26 +477,26 @@ export default function Home() {
       </section>
 
       <footer className="exportbar">
-        <div className="export-title"><span>03</span><div><b>Ready to export</b><small>{background === "None" ? "Transparent background" : "Background included"} · High quality</small></div></div>
+        <div className="export-title"><span>03</span><div><b>{t("Ready to export")}</b><small>{t(background === "None" ? "Transparent background" : "Background included")} · {t("High quality")}</small></div></div>
         <div className={`export-actions ${material==="ASCII"?"ascii-export":""}`}>
-          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span>↓</span><div><b>PNG</b><small>Transparent</small></div></button>
-          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span>▣</span><div><b>PNG + BG</b><small>{background==="None"?"Studio black":"Scene background"}</small></div></button>
-          <button onClick={() => setEmbedOpen(true)}><span>&lt;/&gt;</span><div><b>Embed</b><small>Interactive</small></div></button>
-          {material==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span>≡</span><div><b>TXT</b><small>ASCII graphic</small></div></button>}
-          <button className="primary" onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span>↗</span><div><b>OBJ</b><small>3D geometry</small></div></button>
+          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span>↓</span><div><b>PNG</b><small>{t("Transparent")}</small></div></button>
+          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span>▣</span><div><b>PNG + BG</b><small>{t(background==="None"?"Studio black":"Scene background")}</small></div></button>
+          <button onClick={() => setEmbedOpen(true)}><span>&lt;/&gt;</span><div><b>Embed</b><small>{t("Interactive")}</small></div></button>
+          {material==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span>≡</span><div><b>TXT</b><small>{t("ASCII graphic")}</small></div></button>}
+          <button className="primary" onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span>↗</span><div><b>OBJ</b><small>{t("3D geometry")}</small></div></button>
         </div>
       </footer>
 
       <section className="mobile-gate" aria-label="Desktop only">
         <div className="mobile-logo"><img src={publicAsset("favicon.svg")} alt="Playtools logo"/></div>
         <h1>Playtools</h1>
-        <p>Playtools is available on desktop devices only.</p>
+        <p>{t("Playtools is available on desktop devices only.")}</p>
         <a href="https://razuvaev.me" target="_blank" rel="noreferrer">Alexey Razuvaev ↗</a>
       </section>
 
-      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>Show UI</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}>↓ PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}>▣ PNG + BG</button>{material==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}>≡ TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}>↗ OBJ</button></div>}
+      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>{t("Show UI")}</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}>↓ PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}>▣ PNG + BG</button>{material==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}>≡ TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}>↗ OBJ</button></div>}
 
-      {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEmbedOpen(false)}>×</button><span className="eyebrow">INTERACTIVE EMBED</span><h3>Put this shape anywhere.</h3><p>Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.</p><pre>{embedCode}</pre><button className="copy-button" onClick={() => { navigator.clipboard.writeText(embedCode); flash("Embed code copied"); }}>Copy embed code</button></div></div>}
+      {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEmbedOpen(false)}>×</button><span className="eyebrow">{t("INTERACTIVE EMBED")}</span><h3>{t("Put this shape anywhere.")}</h3><p>{t("Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.")}</p><pre>{embedCode}</pre><button className="copy-button" onClick={() => { navigator.clipboard.writeText(embedCode); flash("Embed code copied"); }}>{t("Copy embed code")}</button></div></div>}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
     </main>
   );

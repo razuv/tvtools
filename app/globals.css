@@ -69,7 +69,7 @@ button { color:inherit; }
 .stage-top span { color:var(--lime); }
 .stage-top b { color:#6e6e6e; font-weight:400; }
 .stage-top button { border:0; background:transparent; cursor:pointer; color:#8e8e8e; font-size:10px; }
-.stage-top button:hover{color:#fff}.stage-top button:disabled{opacity:.28;cursor:default}.stage-actions{gap:10px!important}
+.stage-top button:hover{color:#fff}.stage-top button:disabled{opacity:.28;cursor:default}.stage-actions{gap:10px!important}.stage-tools{display:flex;align-items:center;gap:12px}.language-toggle{display:flex;padding:2px;border:1px solid #292929;border-radius:99px;background:#101010}.language-toggle button{width:27px;height:20px;border:0;border-radius:99px;background:transparent;color:#666;cursor:pointer;font:7px var(--font-mono)}.language-toggle button:hover{color:#fff}.language-toggle button.active{background:#e0e0e0;color:#111}
 .scene { position:relative; overflow:hidden; perspective:1050px; cursor:grab; touch-action:none; user-select:none; background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px); background-size:42px 42px; background-position:center; display:grid; place-items:center; }
 .scene:after { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 50% 42%, transparent 0 25%, rgba(0,0,0,.65) 80%); }
 .scene.is-dragging { cursor:grabbing; }

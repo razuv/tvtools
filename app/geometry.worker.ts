@@ -101,7 +101,7 @@ function subdivideShell(source:THREE.BufferGeometry,requestedDivisions:number,tr
 }
 
 function build(data:GeometryRequest){
-  const normalized=makeShapes(data.shapes);const depth=THREE.MathUtils.mapLinear(data.thickness,8,300,.12,3.5);const edgeAmount=data.edge/300;
+  const normalized=makeShapes(data.shapes);const depth=THREE.MathUtils.mapLinear(data.thickness,1,300,.035,3.5);const edgeAmount=data.edge/300;
   const active=data.geometryMode==="Inflate"||Math.abs(data.mass)+Math.abs(data.bend)+Math.abs(data.bulge)+Math.abs(data.taper)+Math.abs(data.twist)>0;
   // Intermediate depth rings keep the side wall connected when the front and
   // back caps move far apart under Mass or another deformation.
