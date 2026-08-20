@@ -23,6 +23,7 @@ type StageProps = {
   fileName: string;
   text?: string;
   fontUrl?: string;
+  geometryMode: "Extrude" | "Revolve" | "Inflate";
   thickness: number;
   material: string;
   customMaterialUrl?: string;
@@ -43,6 +44,7 @@ type StageProps = {
   surfaceDetail: number;
   edge: number;
   mass: number;
+  inflateAmount: number;
   bend: number;
   bulge: number;
   taper: number;
@@ -615,10 +617,10 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       // the requested visual detail while bounding the actual ring density.
       const ringLimit=Math.min(1024,Math.max(48,48+props.segments));
       const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(Math.max(3,props.segments)),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(Math.max(3,props.segments)),ringLimit).map(point=>[point.x,point.y]))}));
-      runtime.worker.postMessage({id:requestId,shapes:sampled,thickness:props.thickness,segments:props.segments,surfaceDetail:props.surfaceDetail,edge:props.edge,mass:props.mass,bend:props.bend,bulge:props.bulge,taper:props.taper,twist:props.twist});
+      runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:props.geometryMode,thickness:props.thickness,segments:props.segments,surfaceDetail:props.surfaceDetail,edge:props.edge,mass:props.mass,inflateAmount:props.inflateAmount,bend:props.bend,bulge:props.bulge,taper:props.taper,twist:props.twist});
     };
     build(); return () => { cancelled = true; };
-  }, [props.source, props.fileName, props.text, props.fontUrl, props.thickness, props.segments, props.surfaceDetail, props.edge, props.mass, props.bend, props.bulge, props.taper, props.twist]);
+  }, [props.source, props.fileName, props.text, props.fontUrl, props.geometryMode, props.thickness, props.segments, props.surfaceDetail, props.edge, props.mass, props.inflateAmount, props.bend, props.bulge, props.taper, props.twist]);
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;

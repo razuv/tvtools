@@ -5,15 +5,16 @@ import { ThreeStage, type StageHandle } from "./ThreeStage";
 
 type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome" | "ASCII";
 type Material = BuiltInMaterial | `Custom:${string}`;
+type GeometryMode = "Extrude" | "Revolve" | "Inflate";
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
-type ShapeParams = { thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
+type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
 type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredCustomMaterial = Omit<CustomMaterial,"source">;
 type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
 
-const defaultShapeParams:ShapeParams={thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88,asciiCharacters:90,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
+const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88,asciiCharacters:90,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
 
 const materials: { name: BuiltInMaterial; note: string }[] = [
   { name: "Gloss", note: "High shine" },
@@ -90,6 +91,31 @@ function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ 
   return <label className="range-control"><span>{label}<span className="number-wrap"><input aria-label={`${label} value`} type="number" min={min} max={max} step={step} value={value} onChange={(e)=>update(+e.target.value)} /><i>{suffix}</i></span></span><input aria-label={label} type="range" min={min} max={max} step={step} value={value} style={{background:`linear-gradient(90deg,#e0e0e0 0 ${progress}%,#292929 ${progress}% 100%)`}} onChange={(e)=>onChange(+e.target.value)} /></label>;
 }
 
+const lightPresets=[
+  {name:"Standard",x:-3,y:5,z:5},
+  {name:"Diffuse",x:0,y:8,z:2},
+  {name:"Top Left",x:-7,y:7,z:4},
+  {name:"Right",x:8,y:1,z:4},
+];
+
+function LightDirectionControl({x,y,z,onChange}:{x:number;y:number;z:number;onChange:(next:{x:number;y:number;z:number})=>void}){
+  const move=(event:React.PointerEvent<HTMLDivElement>)=>{
+    if(event.buttons===0&&event.type!=="pointerdown")return;
+    const rect=event.currentTarget.getBoundingClientRect();
+    const nextX=Math.max(-10,Math.min(10,((event.clientX-rect.left)/rect.width)*20-10));
+    const nextY=Math.max(-10,Math.min(10,10-((event.clientY-rect.top)/rect.height)*20));
+    onChange({x:Math.round(nextX*10)/10,y:Math.round(nextY*10)/10,z});
+  };
+  return <div className="light-editor">
+    <div className="light-presets">{lightPresets.map(preset=><button key={preset.name} className={Math.abs(x-preset.x)<.2&&Math.abs(y-preset.y)<.2&&Math.abs(z-preset.z)<.2?"active":""} onClick={()=>onChange(preset)}><i style={{"--lx":`${preset.x}px`,"--ly":`${-preset.y}px`} as React.CSSProperties}/><span>{preset.name}</span></button>)}</div>
+    <div className="light-pad" onPointerDown={event=>{event.currentTarget.setPointerCapture(event.pointerId);move(event);}} onPointerMove={move}>
+      <div className="light-preview" style={{"--light-x":`${x*2.2}px`,"--light-y":`${-y*2.2}px`} as React.CSSProperties}/>
+      <span className="light-handle" style={{left:`${(x+10)*5}%`,top:`${(10-y)*5}%`}}/>
+      <small>Drag to position light</small>
+    </div>
+  </div>;
+}
+
 export default function Home() {
   const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape]);
   const [customMaterials,setCustomMaterials]=useState<CustomMaterial[]>([]);
@@ -98,11 +124,13 @@ export default function Home() {
   const [sourceMode, setSourceMode] = useState<"image"|"text">("image");
   const [textDraft, setTextDraft] = useState("SHAPE");
   const [fontDraft, setFontDraft] = useState(googleFonts[0].url);
+  const [geometryMode,setGeometryMode]=useState<GeometryMode>("Extrude");
   const [thickness, setThickness] = useState(42);
   const [segments, setSegments] = useState(18);
   const [surfaceDetail, setSurfaceDetail] = useState(3);
   const [edge, setEdge] = useState(24);
   const [mass, setMass] = useState(0);
+  const [inflateAmount,setInflateAmount]=useState(55);
   const [bend, setBend] = useState(0);
   const [bulge, setBulge] = useState(0);
   const [taper, setTaper] = useState(0);
@@ -156,7 +184,7 @@ export default function Home() {
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
-  const currentParams:ShapeParams={thickness,segments,surfaceDetail,edge,mass,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
+  const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
   const customMaterialUrl=activeCustomMaterial?.source;
@@ -215,11 +243,12 @@ export default function Home() {
       return;
     }
     if(file.size>12*1024*1024){flash("File is larger than 12 MB");return;}
-    const item:ShapeItem={id:`shape-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:file.name,source:URL.createObjectURL(file),blob:file,params:{...defaultShapeParams},kind:"image"};
+    const params={...defaultShapeParams};
+    const item:ShapeItem={id:`shape-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:file.name,source:URL.createObjectURL(file),blob:file,params,kind:"image"};
     setShapeItems(items=>[...items,item]);
     setActiveShapeId(item.id);
-    applyParams(item.params);
-    resetHistory(item.params);
+    applyParams(params);
+    resetHistory(params);
     flash("Shape added to the library");
   };
 
@@ -228,8 +257,9 @@ export default function Home() {
     if(!value){flash("Enter some text first");return;}
     const font=googleFonts.find(item=>item.url===fontDraft)??googleFonts[0];
     const label=value.replace(/\s+/g," ").slice(0,24);
-    const item:ShapeItem={id:`text-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:`${label}.text`,source:null,kind:"text",text:value.slice(0,120),fontUrl:font.url,fontName:font.name,fontFamily:font.family,params:{...defaultShapeParams}};
-    setShapeItems(items=>[...items,item]);setActiveShapeId(item.id);applyParams(item.params);resetHistory(item.params);flash("Text shape added to the library");
+    const params={...defaultShapeParams};
+    const item:ShapeItem={id:`text-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:`${label}.text`,source:null,kind:"text",text:value.slice(0,120),fontUrl:font.url,fontName:font.name,fontFamily:font.family,params};
+    setShapeItems(items=>[...items,item]);setActiveShapeId(item.id);applyParams(params);resetHistory(params);flash("Text shape added to the library");
   };
 
   const importBackground = (file?: File) => {
@@ -262,7 +292,7 @@ export default function Home() {
   const moveAxisDrag=(event:React.PointerEvent<HTMLDivElement>)=>{const drag=axisDragRef.current;if(drag)updateAxis(drag.axis,Math.round((drag.startValue+(event.clientX-drag.startX)*.65)*10)/10);};
   const endAxisDrag=()=>{axisDragRef.current=null;};
 
-  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??90);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");}
+  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setInflateAmount(params.inflateAmount??55);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??90);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
   const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind==="text"?"text":"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
   const deleteShape=(id:string)=>{
@@ -285,7 +315,7 @@ export default function Home() {
   const undo=()=>{if(historyIndexRef.current<=0)return;historyIndexRef.current--;applyParams(historyRef.current[historyIndexRef.current]);setHistoryTick(tick=>tick+1);};
   const redo=()=>{if(historyIndexRef.current>=historyRef.current.length-1)return;historyIndexRef.current++;applyParams(historyRef.current[historyIndexRef.current]);setHistoryTick(tick=>tick+1);};
 
-  const resetGeometry = () => { setThickness(42); setSegments(18); setSurfaceDetail(3); setEdge(24); setMass(0); };
+  const resetGeometry = () => { setGeometryMode("Extrude");setThickness(42); setSegments(18); setSurfaceDetail(3); setEdge(24); setMass(0);setInflateAmount(55); };
   const resetDeform = () => { setBend(0); setBulge(0); setTaper(0); setTwist(0); };
   const resetMaterial = () => { setMaterial("Gloss"); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setGlassIor(1.5); setGlassTransparency(88); setAsciiCharacters(90); setAsciiCharacterSet("Letters + Numbers"); setAsciiCustomSet(" .:-=+*#%@"); };
   const resetAppearance = () => { setColor("#E0E0E0"); setHexDraft("#E0E0E0"); setColorOpacity(100); setRoughness(18); };
@@ -318,7 +348,7 @@ export default function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>Building geometry</b><small>Interface stays responsive</small></div>}
             <div className="drag-hint"><span>↔</span> Drag to orbit · Scroll to zoom</div>
           </div>
@@ -334,11 +364,13 @@ export default function Home() {
           <details className="property-section" open>
             <summary><span>Geometry</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
             <div className="section-body stack-controls">
+              <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><i className={mode.toLowerCase()}/><span>{mode}</span></button>)}</div>
               <RangeControl label="Thickness" value={thickness} min={8} max={300} suffix="mm" onChange={setThickness}/>
               <RangeControl label="Segments" value={segments} min={3} max={1024} onChange={setSegments}/>
               <RangeControl label="Surface detail" value={surfaceDetail} min={1} max={5} onChange={setSurfaceDetail}/>
-              <RangeControl label="Edge" value={edge} min={0} max={300} suffix="%" onChange={setEdge}/>
-              <RangeControl label="Mass" value={mass} min={0} max={250} suffix="%" onChange={setMass}/>
+              {geometryMode!=="Revolve"&&<RangeControl label="Edge" value={edge} min={0} max={300} suffix="%" onChange={setEdge}/>}
+              {geometryMode==="Extrude"&&<RangeControl label="Mass" value={mass} min={0} max={250} suffix="%" onChange={setMass}/>}
+              {geometryMode==="Inflate"&&<RangeControl label="Inflation" value={inflateAmount} min={0} max={200} suffix="%" onChange={setInflateAmount}/>}
             </div>
           </details>
 
@@ -391,15 +423,12 @@ export default function Home() {
           <details className="property-section" open>
             <summary><span>Lighting</span><button onClick={(e)=>{e.preventDefault();resetLighting();}} aria-label="Reset lighting">↺</button></summary>
             <div className="section-body stack-controls">
+              <LightDirectionControl x={lightX} y={lightY} z={lightZ} onChange={next=>{setLightX(next.x);setLightY(next.y);setLightZ(next.z);}}/>
               <RangeControl label="Strength" value={light} min={0} max={300} suffix="%" onChange={setLight}/>
               <RangeControl label="Ambient" value={ambientLight} min={0} max={150} suffix="%" onChange={setAmbientLight}/>
               <RangeControl label="Shadow softness" value={shadowSoftness} min={0} max={100} suffix="%" onChange={setShadowSoftness}/>
               <RangeControl label="Shadow opacity" value={shadowOpacity} min={0} max={70} suffix="%" onChange={setShadowOpacity}/>
-              <div className="light-position">
-                <RangeControl label="Light X" value={lightX} min={-10} max={10} step={.1} onChange={setLightX}/>
-                <RangeControl label="Light Y" value={lightY} min={-10} max={10} step={.1} onChange={setLightY}/>
-                <RangeControl label="Light Z" value={lightZ} min={-10} max={10} step={.1} onChange={setLightZ}/>
-              </div>
+              <div className="light-position"><RangeControl label="X" value={lightX} min={-10} max={10} step={.1} onChange={setLightX}/><RangeControl label="Y" value={lightY} min={-10} max={10} step={.1} onChange={setLightY}/><RangeControl label="Depth" value={lightZ} min={-10} max={10} step={.1} onChange={setLightZ}/></div>
               <label className="switch-row"><span>Soft shadow</span><input type="checkbox" checked={shadows} onChange={(e)=>setShadows(e.target.checked)}/><i /></label>
             </div>
           </details>

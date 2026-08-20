@@ -113,6 +113,11 @@ input[type="range"]::-moz-range-thumb { width:9px; height:9px; border:1px solid 
 .number-wrap { display:flex; align-items:center; height:23px; padding:0 2px; border:0; background:transparent; }
 .number-wrap input { width:43px; border:0; outline:0; background:transparent; color:#ddd; text-align:right; font:8px var(--font-mono); appearance:textfield; }.number-wrap input::-webkit-inner-spin-button{appearance:none}.number-wrap i{color:#666;font:7px var(--font-mono);font-style:normal;margin-left:2px}
 .stack-controls { display:grid; gap:14px; }
+.geometry-modes { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.geometry-modes button { min-width:0; height:54px; padding:7px 4px; border:1px solid #292929; border-radius:7px; background:#111; color:#777; cursor:pointer; display:grid; place-items:center; gap:4px; font:8px var(--font-mono); }
+.geometry-modes button:hover,.geometry-modes button.active{border-color:#777;color:#e0e0e0;background:#171717}.geometry-modes button.active{box-shadow:inset 0 0 0 1px #e0e0e0}
+.geometry-modes i{position:relative;width:25px;height:15px;border:1px solid #686868;border-radius:2px;display:block}.geometry-modes button.active i{border-color:#e0e0e0}
+.geometry-modes i.extrude:after{content:"";position:absolute;width:20px;height:12px;left:4px;top:-4px;border:1px solid currentColor;border-radius:2px;background:#171717}.geometry-modes i.revolve{border-radius:50%;width:19px}.geometry-modes i.revolve:after{content:"↻";position:absolute;left:18px;top:-7px;font-style:normal;font-size:12px}.geometry-modes i.inflate{border-radius:50% 50% 42% 42%;box-shadow:inset -4px -3px 5px #555}
 .stack-controls label>span,.deform-grid label>span,.texture-controls label>span { display:flex; justify-content:space-between; color:#aaa; font-size:9px; margin-bottom:7px; }
 .stack-controls b,.deform-grid b,.texture-controls b { color:#666; font:8px var(--font-mono); font-weight:400; }
 .deform-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px 12px; }
@@ -145,6 +150,9 @@ input[type="range"]::-moz-range-thumb { width:9px; height:9px; border:1px solid 
 .mini-controls label>span { display:flex; justify-content:space-between; color:#a8a8a8; font-size:9px; margin-bottom:8px; }.mini-controls b{color:#666;font:9px var(--font-mono);font-weight:400}
 .light-position { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .light-position .number-wrap input { width:30px; }
+.light-editor{padding:10px;border:1px solid #292929;border-radius:8px;background:#101010}
+.light-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px}.light-presets button{min-width:0;border:0;background:transparent;color:#777;display:grid;justify-items:center;gap:5px;padding:2px;cursor:pointer;font:7px var(--font-mono);white-space:nowrap}.light-presets button:hover,.light-presets button.active{color:#e0e0e0}.light-presets i{position:relative;width:23px;height:23px;border-radius:50%;background:radial-gradient(circle at calc(50% + var(--lx)) calc(50% + var(--ly)),#f5f5f5 0 20%,#aaa 24%,#5a5a5a 72%);box-shadow:inset -3px -4px 7px #151515}.light-presets button.active i{outline:1px solid #e0e0e0;outline-offset:2px}
+.light-pad{position:relative;height:142px;overflow:hidden;border-radius:6px;cursor:crosshair;touch-action:none;background-color:#171717;background-image:radial-gradient(circle,#505050 1px,transparent 1px);background-size:12px 12px}.light-preview{position:absolute;width:78px;height:78px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at calc(50% + var(--light-x)) calc(50% + var(--light-y)),#fff 0 9%,#d9d9d9 28%,#777 72%,#292929 100%);box-shadow:10px 14px 18px rgba(0,0,0,.55)}.light-handle{position:absolute;width:13px;height:13px;transform:translate(-50%,-50%);border:2px solid #e0e0e0;border-radius:50%;background:#2878ff;box-shadow:0 0 0 2px #111;pointer-events:none}.light-pad small{position:absolute;left:8px;bottom:7px;color:#727272;font:7px var(--font-mono);pointer-events:none}
 .switch-row { display:flex; align-items:center; justify-content:space-between; color:#aaa; font-size:9px; cursor:pointer; }
 .switch-row input { position:absolute; opacity:0; pointer-events:none; }
 .switch-row i { width:34px; height:19px; border-radius:99px; background:#292929; position:relative; transition:.2s; }
