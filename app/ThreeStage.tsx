@@ -611,7 +611,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       await new Promise(resolve=>window.setTimeout(resolve,70));
       if (cancelled || !runtimeRef.current) return;
       const deforming=Math.abs(props.mass)+Math.abs(props.bend)+Math.abs(props.bulge)+Math.abs(props.taper)+Math.abs(props.twist)>0;
-      const requestId=++runtime.requestId;const heavy=props.segments>=64||(deforming&&props.surfaceDetail>=3)||props.mass>=70||props.edge>=180;props.onLoading?.(heavy);
+      const requestId=++runtime.requestId;const heavy=props.geometryMode!=="Extrude"||props.segments>=64||(deforming&&props.surfaceDetail>=3)||props.mass>=70||props.edge>=180;props.onLoading?.(heavy);
       // SVGLoader samples every curve separately, so a nominal value of 256
       // can otherwise create thousands of contour points per ring. Preserve
       // the requested visual detail while bounding the actual ring density.

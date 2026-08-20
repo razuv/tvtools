@@ -21,8 +21,12 @@ function revolveGeometry(contours:ShapeData[],requestedSegments:number){
   const rings=contours.flatMap(shape=>[{points:shape.outer,hole:false},...shape.holes.map(points=>({points,hole:true}))]).filter(item=>item.points.length>=3);
   const all=rings.flatMap(item=>item.points);const minX=Math.min(...all.map(point=>point[0]));
   const pointCount=rings.reduce((sum,item)=>sum+item.points.length,0);
-  const budgeted=Math.max(12,Math.floor(240000/Math.max(1,pointCount*2)));
-  const radialSegments=Math.max(12,Math.min(512,Math.round(requestedSegments),budgeted));
+  // A one-to-one mapping made the default 18 segments visibly polygonal.
+  // Give the circular sweep a smooth baseline and scale sublinearly up to 512,
+  // while keeping complex multi-contour shapes within a predictable budget.
+  const desired=Math.round(64+Math.sqrt(Math.max(3,requestedSegments))*14);
+  const budgeted=Math.max(72,Math.floor(360000/Math.max(1,pointCount*2)));
+  const radialSegments=Math.max(72,Math.min(512,desired,budgeted));
   const positions:number[]=[],uvs:number[]=[],indices:number[]=[];
   for(const item of rings){
     let ring=item.points.slice();
@@ -57,15 +61,15 @@ function distanceToContours(x:number,y:number,contours:ShapeData[]){let distance
  * the neighbouring bevel edge remains a straight chord, which opens visible
  * cracks. Uniform edge samples keep caps, bevels and side walls coincident.
  */
-function subdivideShell(source:THREE.BufferGeometry,requestedDivisions:number){
+function subdivideShell(source:THREE.BufferGeometry,requestedDivisions:number,triangleBudget=160000,maxDivisions=5){
   const geometry=source.index?source.toNonIndexed():source;
   const positions=geometry.attributes.position as THREE.BufferAttribute;
   const uvs=geometry.attributes.uv as THREE.BufferAttribute|undefined;
   const triangleCount=positions.count/3;
   // The requested division multiplies triangle count by n². Keep enough room
   // for complex SVGs without returning to the previous 500k-triangle meshes.
-  const budgeted=Math.max(1,Math.floor(Math.sqrt(160000/Math.max(1,triangleCount))));
-  const divisions=Math.max(1,Math.min(5,Math.round(requestedDivisions),budgeted));
+  const budgeted=Math.max(1,Math.floor(Math.sqrt(triangleBudget/Math.max(1,triangleCount))));
+  const divisions=Math.max(1,Math.min(maxDivisions,Math.round(requestedDivisions),budgeted));
   if(divisions===1)return geometry;
   const nextPositions:number[]=[],nextUvs:number[]=[];
   const add=(triangle:number[],triangleUvs:number[])=>{nextPositions.push(...triangle);if(uvs)nextUvs.push(...triangleUvs);};
@@ -112,14 +116,14 @@ function build(data:GeometryRequest){
   let geometry:THREE.BufferGeometry=data.geometryMode==="Revolve"?revolveGeometry(normalized.contours,data.segments):new THREE.ExtrudeGeometry(normalized.shapes,{depth:data.geometryMode==="Inflate"?Math.max(.08,depth*.32):depth,steps:depthSteps,bevelEnabled:data.edge>0,bevelSegments,bevelSize:safeRadius,bevelThickness:safeRadius,bevelOffset:0,curveSegments:data.segments});
   geometry.computeBoundingBox();const before=geometry.boundingBox!;const size=new THREE.Vector3();before.getSize(size);const scale=3/Math.max(size.x,size.y);geometry.scale(scale,-scale,1);geometry.center();
   const deformationContours=normalized.contours.map(shape=>({outer:shape.outer.map(([x,y])=>[x*scale,-y*scale]),holes:shape.holes.map(ring=>ring.map(([x,y])=>[x*scale,-y*scale]))}));
-  if(active)geometry=subdivideShell(geometry,data.surfaceDetail);
+  if(active)geometry=subdivideShell(geometry,data.geometryMode==="Inflate"?data.surfaceDetail+2:data.surfaceDetail,data.geometryMode==="Inflate"?280000:160000,data.geometryMode==="Inflate"?7:5);
   geometry=mergeVertices(geometry,1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute;const mass=data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
   for(let i=0;i<position.count;i++){let x=position.getX(i),y=position.getY(i),z=position.getZ(i);const xn=THREE.MathUtils.clamp((x-cx)/hx,-1,1),yn=THREE.MathUtils.clamp((y-cy)/hy,-1,1),zn=THREE.MathUtils.clamp((z-cz)/hz,-1,1),radial=Math.max(0,1-xn*xn-yn*yn);x=cx+(x-cx)*(1+data.bulge/100*(1-yn*yn)*.36)*(1+data.taper/100*yn*.38)*(1+mass*.08);y=cy+(y-cy)*(1+data.bulge/100*(1-xn*xn)*.18)*(1+mass*.08);if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}z=cz+(z-cz)*(1+mass*.18)+zn*hz*mass*radial*.48;if(data.geometryMode==="Inflate"&&Math.abs(zn)>.15){const distance=distanceToContours(x,y,deformationContours),falloff=Math.min(.42,Math.max(.08,Math.min(normalized.size.x,normalized.size.y)*scale*.18)),lift=Math.sin(THREE.MathUtils.clamp(distance/falloff,0,1)*Math.PI*.5)*data.inflateAmount/100*.72;z=cz+Math.sign(zn)*(hz+lift);}position.setXYZ(i,x,y,z);}
   position.needsUpdate=true;geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
   // A low fixed crease angle made gently curved cap triangles shade as separate
   // facets. The bevel amount now controls a broader, genuinely smooth normal
   // transition while the 90-degree non-bevel edge remains crisp.
-  const creaseDegrees=data.geometryMode==="Inflate"?88:THREE.MathUtils.lerp(38,80,THREE.MathUtils.clamp(data.edge/300,0,1));
+  const creaseDegrees=data.geometryMode==="Revolve"?178:data.geometryMode==="Inflate"?150:THREE.MathUtils.lerp(38,80,THREE.MathUtils.clamp(data.edge/300,0,1));
   // Three's helper groups positions on a fixed 0.01-unit grid. Dense meshes
   // can put unrelated vertices in the same cell, producing the radial bands
   // seen on complex shapes. Temporarily scaling the geometry makes that grid

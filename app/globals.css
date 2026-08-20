@@ -118,6 +118,7 @@ input[type="range"]::-moz-range-thumb { width:9px; height:9px; border:1px solid 
 .geometry-modes button:hover,.geometry-modes button.active{border-color:#777;color:#e0e0e0;background:#171717}.geometry-modes button.active{box-shadow:inset 0 0 0 1px #e0e0e0}
 .geometry-modes i{position:relative;width:25px;height:15px;border:1px solid #686868;border-radius:2px;display:block}.geometry-modes button.active i{border-color:#e0e0e0}
 .geometry-modes i.extrude:after{content:"";position:absolute;width:20px;height:12px;left:4px;top:-4px;border:1px solid currentColor;border-radius:2px;background:#171717}.geometry-modes i.revolve{border-radius:50%;width:19px}.geometry-modes i.revolve:after{content:"↻";position:absolute;left:18px;top:-7px;font-style:normal;font-size:12px}.geometry-modes i.inflate{border-radius:50% 50% 42% 42%;box-shadow:inset -4px -3px 5px #555}
+.geometry-modes button>span{display:flex;align-items:center;justify-content:center;gap:3px}.geometry-modes em{padding:1px 3px;border-radius:3px;background:#303030;color:#aaa;font:5px var(--font-mono);font-style:normal;letter-spacing:.04em}.geometry-modes button.active em{background:#e0e0e0;color:#111}
 .stack-controls label>span,.deform-grid label>span,.texture-controls label>span { display:flex; justify-content:space-between; color:#aaa; font-size:9px; margin-bottom:7px; }
 .stack-controls b,.deform-grid b,.texture-controls b { color:#666; font:8px var(--font-mono); font-weight:400; }
 .deform-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px 12px; }

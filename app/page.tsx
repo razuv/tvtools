@@ -364,8 +364,8 @@ export default function Home() {
           <details className="property-section" open>
             <summary><span>Geometry</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
             <div className="section-body stack-controls">
-              <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><i className={mode.toLowerCase()}/><span>{mode}</span></button>)}</div>
-              <RangeControl label="Thickness" value={thickness} min={8} max={300} suffix="mm" onChange={setThickness}/>
+              <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><i className={mode.toLowerCase()}/><span>{mode}{mode!=="Extrude"&&<em>BETA</em>}</span></button>)}</div>
+              {geometryMode!=="Revolve"&&<RangeControl label="Thickness" value={thickness} min={8} max={300} suffix="mm" onChange={setThickness}/>}
               <RangeControl label="Segments" value={segments} min={3} max={1024} onChange={setSegments}/>
               <RangeControl label="Surface detail" value={surfaceDetail} min={1} max={5} onChange={setSurfaceDetail}/>
               {geometryMode!=="Revolve"&&<RangeControl label="Edge" value={edge} min={0} max={300} suffix="%" onChange={setEdge}/>}
