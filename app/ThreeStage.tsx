@@ -6,6 +6,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js";
+import { FillRule, simplifyPathD, unionD, type PathD } from "clipper2-ts";
 
 export type StageHandle = {
   reset: () => void;
@@ -18,6 +20,8 @@ export type StageHandle = {
 type StageProps = {
   source: string | null;
   fileName: string;
+  text?: string;
+  fontUrl?: string;
   thickness: number;
   material: string;
   color: string;
@@ -47,6 +51,7 @@ type StageProps = {
   background: string;
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
+  onError?: (message: string) => void;
 };
 
 type Runtime = {
@@ -78,30 +83,40 @@ function polygonShape(points: number[][]) {
 
 function edgeLoops(data: Uint8ClampedArray, width: number, height: number) {
   const filled = (x: number, y: number) => x >= 0 && y >= 0 && x < width && y < height && data[(y * width + x) * 4 + 3] > 28;
-  const next = new Map<string, [number, number]>();
   const key = (x: number, y: number) => `${x},${y}`;
+  type Edge={from:[number,number];to:[number,number];used:boolean};
+  const edges:Edge[]=[],outgoing=new Map<string,Edge[]>();
+  const add=(from:[number,number],to:[number,number])=>{
+    const edge={from,to,used:false};edges.push(edge);
+    const start=key(from[0],from[1]),list=outgoing.get(start)??[];list.push(edge);outgoing.set(start,list);
+  };
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (filled(x, y)) {
-    if (!filled(x, y - 1)) next.set(key(x + 1, y), [x, y]);
-    if (!filled(x - 1, y)) next.set(key(x, y), [x, y + 1]);
-    if (!filled(x, y + 1)) next.set(key(x, y + 1), [x + 1, y + 1]);
-    if (!filled(x + 1, y)) next.set(key(x + 1, y + 1), [x + 1, y]);
+    if (!filled(x, y - 1)) add([x + 1, y],[x, y]);
+    if (!filled(x - 1, y)) add([x, y],[x, y + 1]);
+    if (!filled(x, y + 1)) add([x, y + 1],[x + 1, y + 1]);
+    if (!filled(x + 1, y)) add([x + 1, y + 1],[x + 1, y]);
   }
   const loops: number[][][] = [];
-  while (next.size) {
-    const first = next.entries().next().value as [string, [number, number]];
-    const [startKey] = first;
-    const [sx, sy] = startKey.split(",").map(Number);
-    const points: number[][] = [[sx, sy]];
-    let cursor = startKey;
+  for(const first of edges){
+    if(first.used)continue;
+    const points:number[][]=[first.from];
+    let edge:Edge|undefined=first;
     let guard = 0;
-    while (next.has(cursor) && guard++ < width * height * 8) {
-      const point = next.get(cursor)!;
-      next.delete(cursor);
-      points.push(point);
-      cursor = key(point[0], point[1]);
-      if (cursor === startKey) break;
+    while(edge&&!edge.used&&guard++<edges.length+1){
+      edge.used=true;points.push(edge.to);
+      if(edge.to[0]===first.from[0]&&edge.to[1]===first.from[1])break;
+      const candidates=(outgoing.get(key(edge.to[0],edge.to[1]))??[]).filter(candidate=>!candidate.used);
+      if(!candidates.length){edge=undefined;break;}
+      const dx=edge.to[0]-edge.from[0],dy=edge.to[1]-edge.from[1];
+      // At a diagonal pixel contact two contours share one vertex. Following
+      // the strongest clockwise turn keeps each filled region on the left and
+      // prevents the unrelated loops from being stitched into a false bridge.
+      edge=candidates.reduce((best,candidate)=>{
+        const turn=(item:Edge)=>Math.atan2(dx*(item.to[1]-item.from[1])-dy*(item.to[0]-item.from[0]),dx*(item.to[0]-item.from[0])+dy*(item.to[1]-item.from[1]));
+        return turn(candidate)<turn(best)?candidate:best;
+      });
     }
-    if (points.length > 12) loops.push(points);
+    if(points.length>12&&points[points.length-1][0]===points[0][0]&&points[points.length-1][1]===points[0][1]){points.pop();loops.push(points);}
   }
   return loops;
 }
@@ -127,11 +142,72 @@ function simplify(points: number[][], target = 280) {
   return points.filter((_, i) => i % stride === 0);
 }
 
+function pointSegmentDistance(point:number[],start:number[],end:number[]){
+  const dx=end[0]-start[0],dy=end[1]-start[1],lengthSquared=dx*dx+dy*dy;
+  if(!lengthSquared)return Math.hypot(point[0]-start[0],point[1]-start[1]);
+  const t=THREE.MathUtils.clamp(((point[0]-start[0])*dx+(point[1]-start[1])*dy)/lengthSquared,0,1);
+  return Math.hypot(point[0]-(start[0]+dx*t),point[1]-(start[1]+dy*t));
+}
+
+function simplifyOpenRing(points:number[][],epsilon:number):number[][]{
+  if(points.length<=2)return points;
+  let distance=0,index=0;
+  for(let i=1;i<points.length-1;i++){const next=pointSegmentDistance(points[i],points[0],points[points.length-1]);if(next>distance){distance=next;index=i;}}
+  if(distance<=epsilon)return[points[0],points[points.length-1]];
+  const left=simplifyOpenRing(points.slice(0,index+1),epsilon),right=simplifyOpenRing(points.slice(index),epsilon);
+  return[...left.slice(0,-1),...right];
+}
+
+function ringSelfIntersects(points:number[][]){
+  const direction=(a:number[],b:number[],c:number[])=>(c[0]-a[0])*(b[1]-a[1])-(b[0]-a[0])*(c[1]-a[1]);
+  for(let i=0;i<points.length;i++){
+    const a=points[i],b=points[(i+1)%points.length];
+    for(let j=i+1;j<points.length;j++){
+      if(j===i||j===(i+1)%points.length||i===(j+1)%points.length)continue;
+      const c=points[j],d=points[(j+1)%points.length];
+      if(direction(a,b,c)*direction(a,b,d)<0&&direction(c,d,a)*direction(c,d,b)<0)return true;
+    }
+  }
+  return false;
+}
+
+function safeRasterRing(points:number[][],epsilon:number){
+  const clean=points.filter((point,index)=>{
+    const previous=points[(index-1+points.length)%points.length],next=points[(index+1)%points.length];
+    return (point[0]-previous[0])*(next[1]-point[1])!==(point[1]-previous[1])*(next[0]-point[0]);
+  });
+  if(clean.length<4)return clean;
+  const first=clean.reduce((best,point,index)=>point[0]<clean[best][0]?index:best,0);
+  let opposite=first,distance=-1;
+  clean.forEach((point,index)=>{const next=Math.hypot(point[0]-clean[first][0],point[1]-clean[first][1]);if(next>distance){distance=next;opposite=index;}});
+  const arc=(start:number,end:number)=>{const result:number[][]=[];for(let i=start;;i=(i+1)%clean.length){result.push(clean[i]);if(i===end)break;}return result;};
+  const simplifyClosed=(amount:number)=>[...simplifyOpenRing(arc(first,opposite),amount).slice(0,-1),...simplifyOpenRing(arc(opposite,first),amount).slice(0,-1)];
+  // Keep every resulting point on the original silhouette. Moving vertices to
+  // smooth them can make close strokes cross at joins such as A, R and K.
+  const simplified=simplifyClosed(epsilon);
+  if(!ringSelfIntersects(simplified))return simplified;
+  const conservative=simplifyClosed(epsilon*.35);
+  return ringSelfIntersects(conservative)?clean:conservative;
+}
+
 function limitRing(points: THREE.Vector2[], target: number) {
   if (points.length <= target) return points;
-  const result: THREE.Vector2[] = [];
-  for (let i = 0; i < target; i++) result.push(points[Math.floor(i * points.length / target)]);
-  return result;
+  const source:PathD=points.map(point=>({x:point.x,y:point.y}));
+  const xs=points.map(point=>point.x),ys=points.map(point=>point.y);
+  let low=0,high=Math.hypot(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)),best=source;
+  // Uniformly dropping vertices can skip a whole serif or a narrow counter.
+  // Find the smallest closed-path tolerance that meets the requested budget;
+  // reject a candidate whenever simplifying it would alter the topology.
+  for(let iteration=0;iteration<24;iteration++){
+    const epsilon=(low+high)/2,candidate=simplifyPathD(source,epsilon,true);
+    if(candidate.length<3)high=epsilon;
+    else if(candidate.length>target)low=epsilon;
+    else if(ringSelfIntersects(candidate.map(point=>[point.x,point.y])))high=epsilon;
+    else{best=candidate;high=epsilon;}
+  }
+  // Correct topology wins over a hard point budget for exceptionally intricate
+  // glyphs. Normally the binary search lands very close to the target.
+  return best.map(point=>new THREE.Vector2(point.x,point.y));
 }
 
 async function pngShapes(url: string, target: number): Promise<THREE.Shape[]> {
@@ -145,15 +221,25 @@ async function pngShapes(url: string, target: number): Promise<THREE.Shape[]> {
   canvas.width = width; canvas.height = height;
   const context = canvas.getContext("2d", { willReadFrequently: true })!;
   context.drawImage(image, 0, 0, width, height);
-  const loops = edgeLoops(context.getImageData(0, 0, width, height).data, width, height).sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)));
+  return rasterShapes(context.getImageData(0, 0, width, height).data, width, height, target);
+}
+
+function rasterShapes(data: Uint8ClampedArray, width: number, height: number, target: number, smooth=false, flipY=true): THREE.Shape[] {
+  const loops = edgeLoops(data, width, height).sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)));
   if (!loops.length) throw new Error("No opaque contour found");
   const maxSide = Math.max(width, height);
-  const normalized = (loop: number[][]) => simplify(loop, target).map(([x, y]) => [(x - width / 2) / maxSide * 3, (height / 2 - y) / maxSide * 3]);
+  const normalized = (loop: number[][]) => {
+    const prepared=smooth?safeRasterRing(loop,Math.max(1,maxSide/1100)):simplify(loop,target);
+    return simplify(prepared,target).map(([x,y])=>[(x-width/2)/maxSide*3,(flipY?height/2-y:y-height/2)/maxSide*3]);
+  };
   const outers: { loop: number[][]; shape: THREE.Shape }[] = [];
-  loops.forEach((loop) => {
-    const containing = outers.find((outer) => pointInside(loop[0], outer.loop));
+  loops.forEach((loop,index) => {
+    const parents=loops.slice(0,index).filter(parent=>pointInside(loop[0],parent));
+    const isHole=parents.length%2===1;
     const pts = normalized(loop);
-    if (containing) {
+    if (isHole) {
+      const containing=[...outers].reverse().find(outer=>pointInside(loop[0],outer.loop));
+      if(!containing)return;
       const hole = new THREE.Path();
       pts.forEach(([x, y], i) => i ? hole.lineTo(x, y) : hole.moveTo(x, y));
       hole.closePath();
@@ -173,6 +259,80 @@ async function svgShapes(url: string): Promise<THREE.Shape[]> {
   const parsed = new SVGLoader().parse(text);
   const shapes = parsed.paths.flatMap((path) => SVGLoader.createShapes(path));
   if (!shapes.length) throw new Error("No closed SVG paths found");
+  return shapes;
+}
+
+const fontCache = new Map<string, Promise<Font>>();
+
+function loadFont(url: string) {
+  return fetch(url).then(async (response) => {
+    if (!response.ok) throw new Error(`Could not load font (${response.status})`);
+    return parseOpenType(await response.arrayBuffer());
+  });
+}
+
+async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]> {
+  if (!fontCache.has(fontUrl)) fontCache.set(fontUrl, loadFont(fontUrl));
+  const font = await fontCache.get(fontUrl)!;
+  const fallbackUrl="/fonts/inter.ttf";
+  if (!fontCache.has(fallbackUrl)) fontCache.set(fallbackUrl, loadFont(fallbackUrl));
+  const fallback = await fontCache.get(fallbackUrl)!;
+  const lines = text.split(/\r?\n/).slice(0, 5);
+  const shapes:THREE.Shape[]=[];
+  const replay=(target:THREE.Path,commands:PathCommand[])=>commands.forEach(command=>{
+    if(command.type==="M")target.moveTo(command.x,command.y);
+    else if(command.type==="L")target.lineTo(command.x,command.y);
+    else if(command.type==="C")target.bezierCurveTo(command.x1,command.y1,command.x2,command.y2,command.x,command.y);
+    else if(command.type==="Q")target.quadraticCurveTo(command.x1,command.y1,command.x,command.y);
+    else target.closePath();
+  });
+  const vectorGlyphShapes=(commands:PathCommand[])=>{
+    const contours:PathCommand[][]=[];
+    let contour:PathCommand[]=[];
+    commands.forEach(command=>{
+      if(command.type==="M"&&contour.length){contours.push(contour);contour=[];}
+      contour.push(command);
+      if(command.type==="Z"){contours.push(contour);contour=[];}
+    });
+    if(contour.length)contours.push(contour);
+    const sourcePaths:PathD[]=contours.map(items=>{
+      const path=new THREE.Path();replay(path,items);path.closePath();
+      const points=path.getPoints(160).map(point=>({x:point.x,y:point.y}));
+      if(points.length>1&&points[0].x===points[points.length-1].x&&points[0].y===points[points.length-1].y)points.pop();
+      return points;
+    }).filter(points=>points.length>=3);
+    // Some variable TrueType fonts encode a counter and its outer boundary as
+    // one overlapping path (Inter's P is a common example). Resolve the
+    // non-zero font fill with vector polygon union. This splits touching paths
+    // into simple rings without ever passing through pixels or Canvas.
+    const paths=unionD(sourcePaths,FillRule.NonZero,4).map(path=>{
+      const points=path.map(point=>[point.x,point.y]);
+      return {points,area:Math.abs(signedArea(points))};
+    }).filter(item=>item.points.length>=3&&item.area>1e-4).sort((a,b)=>b.area-a.area);
+    const outers:{points:number[][];shape:THREE.Shape}[]=[];
+    paths.forEach((item,index)=>{
+      // Font winding direction differs between TrueType and CFF fonts. Depth
+      // parity is format-independent and preserves counters such as P, B, 8.
+      const depth=paths.slice(0,index).filter(parent=>pointInside(item.points[0],parent.points)).length;
+      if(depth%2===0){const shape=new THREE.Shape();item.points.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));shape.closePath();outers.push({points:item.points,shape});}
+      else{
+        const owner=[...outers].reverse().find(outer=>pointInside(item.points[0],outer.points));
+        if(owner){const hole=new THREE.Path();item.points.forEach(([x,y],i)=>i?hole.lineTo(x,y):hole.moveTo(x,y));hole.closePath();owner.shape.holes.push(hole);}
+      }
+    });
+    return outers.map(item=>item.shape);
+  };
+  lines.forEach((line, index) => {
+    const glyphs=Array.from(line||" ").map(character=>{const primary=font.charToGlyph(character);return primary.index!==0||character===" "?{glyph:primary,font}:{glyph:fallback.charToGlyph(character),font:fallback};});
+    let cursor=0;
+    glyphs.forEach((entry,glyphIndex)=>{
+      const path=entry.glyph.getPath(cursor,index*1180,1000,{},entry.font);
+      if(path.commands.length)shapes.push(...vectorGlyphShapes(path.commands));
+      cursor+=(entry.glyph.advanceWidth??entry.font.unitsPerEm)*1000/entry.font.unitsPerEm;
+      const next=glyphs[glyphIndex+1];if(next&&next.font===entry.font)cursor+=entry.font.getKerningValue(entry.glyph,next.glyph)*1000/entry.font.unitsPerEm;
+    });
+  });
+  if(!shapes.length)throw new Error("Text contains no supported glyphs");
   return shapes;
 }
 
@@ -323,8 +483,13 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const build = async () => {
       const runtime = runtimeRef.current; if (!runtime) return;
       let shapes: THREE.Shape[];
-      try { shapes = props.source ? (props.fileName.toLowerCase().endsWith(".svg") ? await svgShapes(props.source) : await pngShapes(props.source, 48 + props.segments * 18)) : [polygonShape(demoPoints)]; }
-      catch { shapes = [polygonShape(demoPoints)]; }
+      try { shapes = props.text?.trim()&&props.fontUrl ? await textShapes(props.text,props.fontUrl) : props.source ? (props.fileName.toLowerCase().endsWith(".svg") ? await svgShapes(props.source) : await pngShapes(props.source, 48 + props.segments * 18)) : [polygonShape(demoPoints)]; }
+      catch (error) {
+        console.error("Shape generation failed", error);
+        props.onLoading?.(false);
+        props.onError?.(error instanceof Error ? error.message : "Could not generate this shape");
+        return;
+      }
       await new Promise(resolve=>window.setTimeout(resolve,70));
       if (cancelled || !runtimeRef.current) return;
       const deforming=Math.abs(props.mass)+Math.abs(props.bend)+Math.abs(props.bulge)+Math.abs(props.taper)+Math.abs(props.twist)>0;
@@ -332,12 +497,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       // SVGLoader samples every curve separately, so a nominal value of 256
       // can otherwise create thousands of contour points per ring. Preserve
       // the requested visual detail while bounding the actual ring density.
-      const ringLimit=Math.min(384,Math.max(48,48+props.segments));
+      const ringLimit=Math.min(1024,Math.max(48,48+props.segments));
       const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(Math.max(3,props.segments)),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(Math.max(3,props.segments)),ringLimit).map(point=>[point.x,point.y]))}));
       runtime.worker.postMessage({id:requestId,shapes:sampled,thickness:props.thickness,segments:props.segments,surfaceDetail:props.surfaceDetail,edge:props.edge,mass:props.mass,bend:props.bend,bulge:props.bulge,taper:props.taper,twist:props.twist});
     };
     build(); return () => { cancelled = true; };
-  }, [props.source, props.fileName, props.thickness, props.segments, props.surfaceDetail, props.edge, props.mass, props.bend, props.bulge, props.taper, props.twist]);
+  }, [props.source, props.fileName, props.text, props.fontUrl, props.thickness, props.segments, props.surfaceDetail, props.edge, props.mass, props.bend, props.bulge, props.taper, props.twist]);
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;

@@ -12,10 +12,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
   const image = `${protocol}://${host}/og.png`;
   return {
-    title: "SHAPE/3D — Extrude anything",
+    title: "Playtools — Extruder",
     description: "Turn SVG and PNG shapes into material-rich 3D objects, then export them anywhere.",
-    openGraph: { title: "SHAPE/3D — Extrude anything", description: "SVG or PNG in. Material-rich 3D out.", images: [{ url: image, width: 1536, height: 1024 }] },
-    twitter: { card: "summary_large_image", title: "SHAPE/3D — Extrude anything", description: "SVG or PNG in. Material-rich 3D out.", images: [image] },
+    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/favicon.svg" },
+    openGraph: { title: "Playtools — Extruder", description: "SVG, PNG or text in. Material-rich 3D out.", images: [{ url: image, width: 1536, height: 1024 }] },
+    twitter: { card: "summary_large_image", title: "Playtools — Extruder", description: "SVG, PNG or text in. Material-rich 3D out.", images: [image] },
   };
 }
 

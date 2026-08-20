@@ -5,7 +5,9 @@ import { ThreeStage, type StageHandle } from "./ThreeStage";
 
 type Material = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome";
 type ShapeParams = { thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number };
-type ShapeItem = { id:string; name:string; source:string; demo?:boolean; params?:ShapeParams };
+type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
+type StoredShapeItem = Omit<ShapeItem,"source">;
+type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[] };
 
 const defaultShapeParams:ShapeParams={thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,glassIor:1.5,glassTransparency:88};
 
@@ -25,6 +27,49 @@ const materials: { name: Material; note: string }[] = [
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
 const textureMaterials: Material[] = ["Wood","Stone","Marble","Leather","Concrete"];
 const backgrounds = ["Noir","Sky","Sunset","Gallery","Acid"];
+const googleFonts = [
+  {name:"Inter",family:"Studio Inter",url:"/fonts/inter.ttf"},
+  {name:"Space Grotesk",family:"Studio Space",url:"/fonts/space-grotesk.ttf"},
+  {name:"Playfair Display",family:"Studio Playfair",url:"/fonts/playfair-display.ttf"},
+  {name:"Roboto Mono",family:"Studio Mono",url:"/fonts/roboto-mono.ttf"},
+  {name:"Bebas Neue",family:"Studio Bebas",url:"/fonts/bebas-neue.ttf"},
+  {name:"Pacifico",family:"Studio Pacifico",url:"/fonts/pacifico.ttf"},
+];
+
+const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:"/rzw.svg",demo:true,kind:"image"};
+const libraryDatabase="shape3d-studio-library";
+const libraryStore="state";
+
+function openLibraryDatabase(){
+  return new Promise<IDBDatabase>((resolve,reject)=>{
+    const request=indexedDB.open(libraryDatabase,1);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains(libraryStore))request.result.createObjectStore(libraryStore);};
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error);
+  });
+}
+
+async function readStoredLibrary(){
+  const database=await openLibraryDatabase();
+  return new Promise<StoredLibrary|null>((resolve,reject)=>{
+    const transaction=database.transaction(libraryStore,"readonly");
+    const request=transaction.objectStore(libraryStore).get("library");
+    request.onsuccess=()=>resolve((request.result as StoredLibrary|undefined)??null);
+    request.onerror=()=>reject(request.error);
+    transaction.oncomplete=()=>database.close();
+  });
+}
+
+async function writeStoredLibrary(library:StoredLibrary){
+  const database=await openLibraryDatabase();
+  return new Promise<void>((resolve,reject)=>{
+    const transaction=database.transaction(libraryStore,"readwrite");
+    transaction.objectStore(libraryStore).put(library,"library");
+    transaction.oncomplete=()=>{database.close();resolve();};
+    transaction.onerror=()=>{database.close();reject(transaction.error);};
+    transaction.onabort=()=>{database.close();reject(transaction.error);};
+  });
+}
 
 function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ label:string; value:number; min:number; max:number; step?:number; suffix?:string; onChange:(value:number)=>void }) {
   const update = (raw:number) => onChange(Math.max(min,Math.min(max,Number.isFinite(raw)?raw:min)));
@@ -33,8 +78,12 @@ function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ 
 }
 
 export default function Home() {
-  const [shapeItems, setShapeItems] = useState<ShapeItem[]>([{id:"demo-rzw",name:"rzw.svg",source:"/rzw.svg",demo:true}]);
+  const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape]);
   const [activeShapeId, setActiveShapeId] = useState("demo-rzw");
+  const [libraryReady, setLibraryReady] = useState(false);
+  const [sourceMode, setSourceMode] = useState<"image"|"text">("image");
+  const [textDraft, setTextDraft] = useState("SHAPE");
+  const [fontDraft, setFontDraft] = useState(googleFonts[0].url);
   const [thickness, setThickness] = useState(42);
   const [segments, setSegments] = useState(18);
   const [surfaceDetail, setSurfaceDetail] = useState(3);
@@ -79,6 +128,8 @@ export default function Home() {
   const historyRef = useRef<ShapeParams[]>([]);
   const historyIndexRef = useRef(-1);
   const suppressHistoryRef = useRef(false);
+  const cacheWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const cacheErrorRef = useRef(false);
 
   const shapesRef = useRef(shapeItems);
   shapesRef.current=shapeItems;
@@ -88,7 +139,21 @@ export default function Home() {
   const currentParams:ShapeParams={thickness,segments,surfaceDetail,edge,mass,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,glassIor,glassTransparency};
   const paramsSignature=JSON.stringify(currentParams);
 
-  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source.startsWith("blob:"))URL.revokeObjectURL(item.source);}); }, []);
+  useEffect(()=>{
+    let cancelled=false;
+    readStoredLibrary().then(saved=>{
+      if(cancelled)return;
+      const restored=(saved?.items??[]).map(item=>({...item,source:item.blob?URL.createObjectURL(item.blob):null}));
+      const items=[demoShape,...restored];
+      const target=items.find(item=>item.id===saved?.activeShapeId)??items[0];
+      setShapeItems(items);setActiveShapeId(target.id);setSourceMode(target.kind==="text"?"text":"image");
+      if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}
+      const params=target.params??{...defaultShapeParams};applyParams(params);resetHistory(params);
+    }).catch(()=>{}).finally(()=>{if(!cancelled)setLibraryReady(true);});
+    return()=>{cancelled=true;};
+  },[]);
+
+  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);}); }, []);
 
   useEffect(() => () => { if (background.startsWith("blob:")) URL.revokeObjectURL(background); }, [background]);
 
@@ -99,6 +164,18 @@ export default function Home() {
     if(!current||JSON.stringify(current)!==paramsSignature){historyRef.current=historyRef.current.slice(0,historyIndexRef.current+1);historyRef.current.push(snapshot);if(historyRef.current.length>100)historyRef.current.shift();historyIndexRef.current=historyRef.current.length-1;setHistoryTick(tick=>tick+1);}
     setShapeItems(items=>items.map(item=>item.id===activeShapeId?{...item,params:snapshot}:item));
   },[paramsSignature,activeShapeId]);
+
+  useEffect(()=>{
+    if(!libraryReady)return;
+    const timer=window.setTimeout(()=>{
+      const items:StoredShapeItem[]=shapeItems.filter(item=>!item.demo).map(({source:_,...item})=>item);
+      const snapshot:StoredLibrary={version:1,activeShapeId,items};
+      cacheWriteRef.current=cacheWriteRef.current.catch(()=>{}).then(()=>writeStoredLibrary(snapshot)).then(()=>{cacheErrorRef.current=false;}).catch(()=>{
+        if(!cacheErrorRef.current){cacheErrorRef.current=true;flash("Could not cache the shape library");}
+      });
+    },250);
+    return()=>window.clearTimeout(timer);
+  },[shapeItems,activeShapeId,libraryReady]);
 
   const flash = (message: string) => {
     setToast(message);
@@ -111,12 +188,22 @@ export default function Home() {
       flash("SVG and PNG files only");
       return;
     }
-    const item={id:`shape-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:file.name,source:URL.createObjectURL(file),params:{...defaultShapeParams}};
+    if(file.size>12*1024*1024){flash("File is larger than 12 MB");return;}
+    const item:ShapeItem={id:`shape-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:file.name,source:URL.createObjectURL(file),blob:file,params:{...defaultShapeParams},kind:"image"};
     setShapeItems(items=>[...items,item]);
     setActiveShapeId(item.id);
     applyParams(item.params);
     resetHistory(item.params);
     flash("Shape added to the library");
+  };
+
+  const createTextShape = () => {
+    const value=textDraft.trim();
+    if(!value){flash("Enter some text first");return;}
+    const font=googleFonts.find(item=>item.url===fontDraft)??googleFonts[0];
+    const label=value.replace(/\s+/g," ").slice(0,24);
+    const item:ShapeItem={id:`text-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:`${label}.text`,source:null,kind:"text",text:value.slice(0,120),fontUrl:font.url,fontName:font.name,fontFamily:font.family,params:{...defaultShapeParams}};
+    setShapeItems(items=>[...items,item]);setActiveShapeId(item.id);applyParams(item.params);resetHistory(item.params);flash("Text shape added to the library");
   };
 
   const importBackground = (file?: File) => {
@@ -137,7 +224,22 @@ export default function Home() {
 
   function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
-  const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);applyParams(params);resetHistory(params);};
+  const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind==="text"?"text":"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
+  const deleteShape=(id:string)=>{
+    const index=shapeItems.findIndex(item=>item.id===id),target=shapeItems[index];
+    if(index<0||target.demo)return;
+    if(target.source?.startsWith("blob:"))URL.revokeObjectURL(target.source);
+    const remaining=shapeItems.filter(item=>item.id!==id);
+    setShapeItems(remaining);
+    if(id===activeShapeId){
+      const next=remaining[Math.min(index,remaining.length-1)]??demoShape;
+      const params=next.params??{...defaultShapeParams};
+      setActiveShapeId(next.id);setSourceMode(next.kind==="text"?"text":"image");
+      if(next.kind==="text"){setTextDraft(next.text??"");setFontDraft(next.fontUrl??googleFonts[0].url);}
+      applyParams(params);resetHistory(params);
+    }
+    flash("Shape removed from the library");
+  };
   const copyParams=()=>{clipboardRef.current={...currentParams};flash("Parameters copied");};
   const pasteParams=()=>{if(!clipboardRef.current){flash("Copy parameters first");return;}applyParams(clipboardRef.current,false);flash("Parameters pasted");};
   const undo=()=>{if(historyIndexRef.current<=0)return;historyIndexRef.current--;applyParams(historyRef.current[historyIndexRef.current]);setHistoryTick(tick=>tick+1);};
@@ -160,14 +262,13 @@ export default function Home() {
       <section className="workspace">
         <aside className="panel import-panel">
           <div className="panel-heading"><span>01</span><h2>Source</h2></div>
-          <button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
-            <span className="upload-icon">↗</span>
-            <strong>Drop your shape</strong>
-            <small>SVG or PNG · max 12 MB</small>
-          </button>
+          <div className="source-tabs"><button className={sourceMode==="image"?"active":""} onClick={()=>setSourceMode("image")}>Image</button><button className={sourceMode==="text"?"active":""} onClick={()=>setSourceMode("text")}>Text</button></div>
+          {sourceMode==="image"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
+            <span className="upload-icon">↗</span><strong>Drop your shape</strong><small>SVG or PNG · max 12 MB</small>
+          </button>:<div className="text-source"><label><span>Text</span><textarea aria-label="Text to extrude" maxLength={120} rows={3} value={textDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>Google Font</span><select aria-label="Google Font" value={fontDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setFontDraft(event.target.value)}>{googleFonts.map(font=><option key={font.url} value={font.url}>{font.name}</option>)}</select></label><button onClick={createTextShape}>Create text shape <span>↗</span></button><small>Open Font License · ⌘ Enter</small></div>}
           <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
-          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><button key={item.id} className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className="source-thumb">{item.demo?<img src="/rzw.svg" alt=""/>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.demo?"Demo vector":"Imported image"}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>)}</div>
-          <div className="tip"><span>i</span><p>Transparent shapes with clean edges give the best extrusion.</p></div>
+          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src="/rzw.svg" alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:item.demo?"Demo vector":"Imported image"}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
+          <div className="tip"><span>i</span><p>{sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion."}</p></div>
         </aside>
 
         <section className="stage" aria-label="3D preview">
@@ -177,7 +278,7 @@ export default function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} thickness={thickness} material={material} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} background={background} onReady={setTriangles} onLoading={setIsRendering} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} thickness={thickness} material={material} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} background={background} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>Building geometry</b><small>Interface stays responsive</small></div>}
             <div className="drag-hint"><span>↔</span> Drag to orbit · Scroll to zoom</div>
           </div>
@@ -194,7 +295,7 @@ export default function Home() {
             <summary><span>Geometry</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
             <div className="section-body stack-controls">
               <RangeControl label="Thickness" value={thickness} min={8} max={300} suffix="mm" onChange={setThickness}/>
-              <RangeControl label="Segments" value={segments} min={3} max={256} onChange={setSegments}/>
+              <RangeControl label="Segments" value={segments} min={3} max={1024} onChange={setSegments}/>
               <RangeControl label="Surface detail" value={surfaceDetail} min={1} max={5} onChange={setSurfaceDetail}/>
               <RangeControl label="Edge" value={edge} min={0} max={300} suffix="%" onChange={setEdge}/>
               <RangeControl label="Mass" value={mass} min={0} max={250} suffix="%" onChange={setMass}/>

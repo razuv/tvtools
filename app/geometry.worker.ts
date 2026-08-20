@@ -69,7 +69,10 @@ function build(data:GeometryRequest){
   // More than sixteen bevel rings is visually redundant at this scale and can
   // multiply complex SVGs into hundreds of thousands of triangles.
   const bevelSegments=Math.max(1,Math.round(THREE.MathUtils.lerp(1,16,Math.sqrt(THREE.MathUtils.clamp(edgeAmount,0,1)))));
-  let geometry:THREE.BufferGeometry=new THREE.ExtrudeGeometry(normalized.shapes,{depth,steps:depthSteps,bevelEnabled:data.edge>0,bevelSegments,bevelSize:safeRadius,bevelThickness:safeRadius,bevelOffset:-safeRadius,curveSegments:data.segments});
+  // Start the bevel on the exact source outline. A negative offset expands the
+  // cap into concave joins (notably the bowl/stem junction in grotesque P) and
+  // makes Three's offset rings cross before triangulation.
+  let geometry:THREE.BufferGeometry=new THREE.ExtrudeGeometry(normalized.shapes,{depth,steps:depthSteps,bevelEnabled:data.edge>0,bevelSegments,bevelSize:safeRadius,bevelThickness:safeRadius,bevelOffset:0,curveSegments:data.segments});
   geometry.computeBoundingBox();const before=geometry.boundingBox!;const size=new THREE.Vector3();before.getSize(size);const scale=3/Math.max(size.x,size.y);geometry.scale(scale,-scale,1);geometry.center();
   if(active)geometry=subdivideShell(geometry,data.surfaceDetail);
   geometry=mergeVertices(geometry,1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute;const mass=data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
