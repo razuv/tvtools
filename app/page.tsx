@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
 
-type Material = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome";
+type Material = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Clay" | "Chrome" | "ASCII";
 type ShapeParams = { thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;glassIor:number;glassTransparency:number };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
 type StoredShapeItem = Omit<ShapeItem,"source">;
@@ -22,6 +22,7 @@ const materials: { name: Material; note: string }[] = [
   { name: "Concrete", note: "CC0 texture" },
   { name: "Clay", note: "Soft matte" },
   { name: "Chrome", note: "Mirror" },
+  { name: "ASCII", note: "Real-time text" },
 ];
 
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
@@ -370,15 +371,16 @@ export default function Home() {
 
       <footer className="exportbar">
         <div className="export-title"><span>03</span><div><b>Ready to export</b><small>{background === "None" ? "Transparent background" : "Background included"} · High quality</small></div></div>
-        <div className="export-actions">
+        <div className={`export-actions ${material==="ASCII"?"ascii-export":""}`}>
           <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span>↓</span><div><b>PNG</b><small>Transparent</small></div></button>
           <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span>▣</span><div><b>PNG + BG</b><small>{background==="None"?"Studio black":"Scene background"}</small></div></button>
           <button onClick={() => setEmbedOpen(true)}><span>&lt;/&gt;</span><div><b>Embed</b><small>Interactive</small></div></button>
+          {material==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span>≡</span><div><b>TXT</b><small>ASCII graphic</small></div></button>}
           <button className="primary" onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span>↗</span><div><b>OBJ</b><small>3D geometry</small></div></button>
         </div>
       </footer>
 
-      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>Show UI</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}>↓ PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}>▣ PNG + BG</button><button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}>↗ OBJ</button></div>}
+      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>Show UI</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}>↓ PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}>▣ PNG + BG</button>{material==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}>≡ TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}>↗ OBJ</button></div>}
 
       {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEmbedOpen(false)}>×</button><span className="eyebrow">INTERACTIVE EMBED</span><h3>Put this shape anywhere.</h3><p>Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.</p><pre>{embedCode}</pre><button className="copy-button" onClick={() => { navigator.clipboard.writeText(embedCode); flash("Embed code copied"); }}>Copy embed code</button></div></div>}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}

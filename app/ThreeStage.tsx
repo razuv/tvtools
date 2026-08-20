@@ -15,6 +15,7 @@ export type StageHandle = {
   setRotation: (axis: "x" | "y" | "z", degrees: number) => void;
   exportPng: (name: string, withBackground?: boolean) => void;
   exportObj: (name: string) => void;
+  exportTxt: (name: string) => void;
 };
 
 type StageProps = {
@@ -66,7 +67,75 @@ type Runtime = {
   shadowFloor: THREE.Mesh;
   worker: Worker;
   requestId: number;
+  asciiCanvas: HTMLCanvasElement;
+  asciiSample: HTMLCanvasElement;
+  asciiLastFrame: number;
 };
+
+const asciiRamp = " .,:;irsXA253hMHGS#9B&@";
+
+function asciiRowsFromPixels(data: Uint8ClampedArray, columns: number, rows: number) {
+  const lines:string[]=[];
+  for(let y=0;y<rows;y++){
+    let line="";
+    for(let x=0;x<columns;x++){
+      const offset=(y*columns+x)*4;
+      const alpha=data[offset+3]/255;
+      if(alpha<.08){line+=" ";continue;}
+      const luminance=(data[offset]*.2126+data[offset+1]*.7152+data[offset+2]*.0722)/255;
+      line+=asciiRamp[Math.min(asciiRamp.length-1,Math.floor(luminance*(asciiRamp.length-1)))];
+    }
+    lines.push(line.trimEnd());
+  }
+  return lines;
+}
+
+function renderAscii(runtime:Runtime,width:number,height:number,backgroundMode:"scene"|"transparent"|"opaque",target=runtime.asciiCanvas,columns=Math.max(48,Math.min(150,Math.round(width/7)))){
+  const {renderer,scene,camera,model,shadowFloor,asciiSample}=runtime;
+  const oldBackground=scene.background;
+  const oldFloorVisible=shadowFloor.visible;
+  const oldModelVisible=model.visible;
+  const pixelRatio=target===runtime.asciiCanvas?Math.min(window.devicePixelRatio,2):1;
+  const outputWidth=Math.max(1,Math.round(width*pixelRatio));
+  const outputHeight=Math.max(1,Math.round(height*pixelRatio));
+  if(target.width!==outputWidth||target.height!==outputHeight){target.width=outputWidth;target.height=outputHeight;}
+  const context=target.getContext("2d")!;
+  context.clearRect(0,0,outputWidth,outputHeight);
+
+  scene.background=backgroundMode==="transparent"?null:backgroundMode==="opaque"?(oldBackground??new THREE.Color("#080808")):oldBackground;
+  model.visible=false;
+  renderer.render(scene,camera);
+  context.drawImage(renderer.domElement,0,0,outputWidth,outputHeight);
+
+  scene.background=null;
+  shadowFloor.visible=false;
+  model.visible=true;
+  renderer.render(scene,camera);
+  const rows=Math.max(24,Math.round(columns*height/Math.max(1,width)*.5));
+  asciiSample.width=columns;
+  asciiSample.height=rows;
+  const sampleContext=asciiSample.getContext("2d",{willReadFrequently:true})!;
+  sampleContext.clearRect(0,0,columns,rows);
+  sampleContext.drawImage(renderer.domElement,0,0,columns,rows);
+  const pixels=sampleContext.getImageData(0,0,columns,rows).data;
+  const lines=asciiRowsFromPixels(pixels,columns,rows);
+  const cellWidth=outputWidth/columns;
+  const cellHeight=outputHeight/rows;
+  context.font=`${Math.ceil(cellHeight*1.12)}px "JetBrains Mono",monospace`;
+  context.textAlign="center";
+  context.textBaseline="middle";
+  for(let y=0;y<rows;y++)for(let x=0;x<columns;x++){
+    const character=lines[y]?.[x]??" ";
+    if(character===" ")continue;
+    const offset=(y*columns+x)*4;
+    context.fillStyle=`rgba(${pixels[offset]},${pixels[offset+1]},${pixels[offset+2]},${pixels[offset+3]/255})`;
+    context.fillText(character,(x+.5)*cellWidth,(y+.5)*cellHeight);
+  }
+  scene.background=oldBackground;
+  shadowFloor.visible=oldFloorVisible;
+  model.visible=oldModelVisible;
+  return lines.join("\n");
+}
 
 const demoPoints = [[.5,.03],[.61,.34],[.94,.23],[.72,.51],[.98,.66],[.64,.65],[.66,.98],[.49,.72],[.27,.96],[.34,.63],[.02,.58],[.31,.43],[.12,.16],[.44,.34]];
 
@@ -361,6 +430,7 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
   if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.015,r*.28), metalness:0, transmission:glassTransparency/100, thickness:1.8, ior:glassIor, dispersion:.035, transparent:true, opacity:alpha, clearcoat:1, clearcoatRoughness:.025, envMapIntensity:1.8, attenuationColor:value, attenuationDistance:3.5 });
   else if (kind === "Metal") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.12,r), metalness:.88 });
   else if (kind === "Chrome") result = new THREE.MeshPhysicalMaterial({ color:new THREE.Color("#f3f5f7"), roughness:Math.max(.025,r*.22), metalness:1, clearcoat:1, clearcoatRoughness:.02, envMapIntensity:2.8 });
+  else if (kind === "ASCII") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.16,r), metalness:.08 });
   else if (textureAssets[kind]) {
     const [diffuseUrl, normalUrl] = textureAssets[kind];
     const map = loadTexture(diffuseUrl, true);
@@ -408,12 +478,14 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const host = runtime.renderer.domElement.parentElement!;
       const { width, height } = host.getBoundingClientRect();
       const oldBackground=runtime.scene.background;
-      runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;
       runtime.renderer.setSize(1400, 1400, false);
       runtime.camera.aspect = 1;
       runtime.camera.updateProjectionMatrix();
-      runtime.renderer.render(runtime.scene, runtime.camera);
-      runtime.renderer.domElement.toBlob((blob) => {
+      const ascii=latestPropsRef.current.material==="ASCII";
+      const output=ascii?document.createElement("canvas"):runtime.renderer.domElement;
+      if(ascii)renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",output,180);
+      else{runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;runtime.renderer.render(runtime.scene,runtime.camera);}
+      output.toBlob((blob) => {
         if (blob) downloadBlob(blob, `${name}.png`);
         runtime.renderer.setSize(width, height, false);
         runtime.camera.aspect = width / Math.max(1, height);
@@ -425,6 +497,13 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const runtime = runtimeRef.current; if (!runtime) return;
       const text = new OBJExporter().parse(runtime.model);
       downloadBlob(new Blob([text], { type:"text/plain" }), `${name}.obj`);
+    },
+    exportTxt(name) {
+      const runtime=runtimeRef.current;if(!runtime)return;
+      const host=runtime.renderer.domElement.parentElement!;
+      const {width,height}=host.getBoundingClientRect();
+      const text=renderAscii(runtime,width,height,"transparent",document.createElement("canvas"),120);
+      downloadBlob(new Blob([`${text}\n`],{type:"text/plain;charset=utf-8"}),`${name}.txt`);
     },
   }));
 
@@ -444,6 +523,11 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
     host.appendChild(renderer.domElement);
+    const asciiCanvas=document.createElement("canvas");
+    asciiCanvas.className="ascii-output";
+    asciiCanvas.setAttribute("aria-label","Real-time ASCII render");
+    host.appendChild(asciiCanvas);
+    const asciiSample=document.createElement("canvas");
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = .075; controls.enablePan = false; controls.minDistance = 3; controls.maxDistance = 8;
     const model = new THREE.Group(); model.rotation.set(THREE.MathUtils.degToRad(-16),THREE.MathUtils.degToRad(28),THREE.MathUtils.degToRad(-7)); scene.add(model);
@@ -463,7 +547,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0 };
+    runtimeRef.current = { scene, camera, renderer, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0 };
     worker.onmessage=(event)=>{
       const runtime=runtimeRef.current;if(!runtime||event.data.id!==runtime.requestId)return;
       latestPropsRef.current.onLoading?.(false);
@@ -474,8 +558,27 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     };
     const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
-    let frame = 0; const loop = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(loop); }; loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose(); renderer.dispose(); host.removeChild(renderer.domElement); runtimeRef.current = null; };
+    let frame = 0;
+    const loop = (time=0) => {
+      controls.update();
+      const runtime=runtimeRef.current;
+      if(runtime&&latestPropsRef.current.material==="ASCII"){
+        renderer.domElement.style.opacity="0";
+        asciiCanvas.style.display="block";
+        if(time-runtime.asciiLastFrame>42){
+          const {width,height}=host.getBoundingClientRect();
+          renderAscii(runtime,width,height,"scene");
+          runtime.asciiLastFrame=time;
+        }
+      }else{
+        renderer.domElement.style.opacity="1";
+        asciiCanvas.style.display="none";
+        renderer.render(scene,camera);
+      }
+      frame=requestAnimationFrame(loop);
+    };
+    loop();
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose(); renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {
