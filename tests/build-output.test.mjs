@@ -29,6 +29,8 @@ test("ships the editor features and public assets", async () => {
   assert.match(page, /Create text shape/);
   assert.match(page, /TTF and OTF files only/);
   assert.match(page, /Geometry operation/);
+  assert.match(page, /Post-processing effect/);
+  assert.match(page, /Halftone/);
   assert.match(page, /exportObj/);
   assert.doesNotMatch(packageJson, /vinext|next|cloudflare|wrangler|drizzle/i);
   assert.deepEqual([...ogImage.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);

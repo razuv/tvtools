@@ -6,6 +6,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js";
 import { FillRule, simplifyPathD, unionD, type PathD } from "clipper2-ts";
 
@@ -56,6 +60,8 @@ type StageProps = {
   demoSpin?: boolean;
   asciiCharacters: number;
   asciiGlyphs: string;
+  effect: string;
+  effectIntensity: number;
   background: string;
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
@@ -67,6 +73,8 @@ type Runtime = {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
+  composer: EffectComposer;
+  effectPass: ShaderPass;
   controls: OrbitControls;
   model: THREE.Group;
   key: THREE.DirectionalLight;
@@ -81,6 +89,79 @@ type Runtime = {
   autoRotate: boolean;
   lastRotationEmit: number;
 };
+
+const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5};
+const postEffectShader={
+  uniforms:{
+    tDiffuse:{value:null},
+    resolution:{value:new THREE.Vector2(1,1)},
+    mode:{value:0},
+    intensity:{value:1},
+  },
+  vertexShader:`varying vec2 vUv;
+    void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float mode;
+    uniform float intensity;
+    varying vec2 vUv;
+    float luma(vec3 color){return dot(color,vec3(.2126,.7152,.0722));}
+    float sobel(vec2 uv){
+      vec2 t=1.0/max(resolution,vec2(1.0));
+      float tl=luma(texture2D(tDiffuse,uv+t*vec2(-1.0,1.0)).rgb);
+      float tc=luma(texture2D(tDiffuse,uv+t*vec2(0.0,1.0)).rgb);
+      float tr=luma(texture2D(tDiffuse,uv+t*vec2(1.0,1.0)).rgb);
+      float ml=luma(texture2D(tDiffuse,uv+t*vec2(-1.0,0.0)).rgb);
+      float mr=luma(texture2D(tDiffuse,uv+t*vec2(1.0,0.0)).rgb);
+      float bl=luma(texture2D(tDiffuse,uv+t*vec2(-1.0,-1.0)).rgb);
+      float bc=luma(texture2D(tDiffuse,uv+t*vec2(0.0,-1.0)).rgb);
+      float br=luma(texture2D(tDiffuse,uv+t*vec2(1.0,-1.0)).rgb);
+      float gx=-tl-2.0*ml-bl+tr+2.0*mr+br;
+      float gy=tl+2.0*tc+tr-bl-2.0*bc-br;
+      return length(vec2(gx,gy));
+    }
+    void main(){
+      vec4 base=texture2D(tDiffuse,vUv);
+      float amount=clamp(intensity,0.0,1.0);
+      vec3 result=base.rgb;
+      if(mode>0.5&&mode<1.5){
+        float levels=mix(7.0,3.0,amount);
+        vec3 quantized=floor(base.rgb*levels+.5)/levels;
+        float edge=smoothstep(mix(.42,.12,amount),mix(.82,.32,amount),sobel(vUv));
+        result=mix(base.rgb,quantized*(1.0-edge*.9),amount);
+      }else if(mode>1.5&&mode<2.5){
+        float edge=smoothstep(mix(.3,.08,amount),mix(.72,.28,amount),sobel(vUv));
+        float paper=.98-luma(base.rgb)*.08;
+        vec3 sketch=vec3(clamp(paper-edge*1.25,0.0,1.0));
+        result=mix(base.rgb,sketch,amount);
+      }else if(mode>2.5&&mode<3.5){
+        float cell=mix(5.0,15.0,amount);
+        vec2 grid=floor(vUv*resolution/cell)*cell/resolution;
+        vec4 sampleColor=texture2D(tDiffuse,grid+cell*.5/resolution);
+        vec2 point=fract(vUv*resolution/cell)-.5;
+        float radius=mix(.08,.48,1.0-luma(sampleColor.rgb));
+        float dotMask=1.0-smoothstep(radius,radius+.08,length(point));
+        vec3 printColor=mix(vec3(1.0),sampleColor.rgb*.35,dotMask);
+        result=mix(base.rgb,printColor,amount);
+      }else if(mode>3.5&&mode<4.5){
+        float cell=mix(2.0,28.0,amount);
+        vec2 pixelUv=(floor(vUv*resolution/cell)+.5)*cell/resolution;
+        result=mix(base.rgb,texture2D(tDiffuse,pixelUv).rgb,amount);
+      }else if(mode>4.5){
+        vec2 offset=vec2(1.0,0.35)/max(resolution,vec2(1.0))*amount*12.0;
+        vec3 split=vec3(texture2D(tDiffuse,vUv+offset).r,base.g,texture2D(tDiffuse,vUv-offset).b);
+        result=mix(base.rgb,split,amount);
+      }
+      gl_FragColor=vec4(result,base.a);
+    }`,
+};
+
+function renderWithEffects(runtime:Runtime,props:StageProps){
+  runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
+  runtime.effectPass.uniforms.intensity.value=props.effectIntensity/100;
+  runtime.effectPass.uniforms.resolution.value.set(runtime.renderer.domElement.width,runtime.renderer.domElement.height);
+  runtime.composer.render();
+}
 
 const defaultAsciiRamp = " .,:;irsXA253hMHGS#9B&@";
 
@@ -510,10 +591,16 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const ascii=latestPropsRef.current.material==="ASCII";
       const output=ascii?document.createElement("canvas"):runtime.renderer.domElement;
       if(ascii){const current=latestPropsRef.current;renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",current.asciiGlyphs,output,current.asciiCharacters);}
-      else{runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;runtime.renderer.render(runtime.scene,runtime.camera);}
+      else{
+        const current=latestPropsRef.current;
+        runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;
+        runtime.composer.setSize(1400,1400);
+        if(current.effect==="None")runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current);
+      }
       output.toBlob((blob) => {
         if (blob) downloadBlob(blob, `${name}.png`);
         runtime.renderer.setSize(width, height, false);
+        runtime.composer.setSize(width,height);
         runtime.camera.aspect = width / Math.max(1, height);
         runtime.camera.updateProjectionMatrix();
         runtime.scene.background=oldBackground;
@@ -548,6 +635,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     renderer.toneMappingExposure = 1.08;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
+    const composer=new EffectComposer(renderer);
+    composer.setPixelRatio(renderer.getPixelRatio());
+    composer.addPass(new RenderPass(scene,camera));
+    const effectPass=new ShaderPass(postEffectShader);
+    composer.addPass(effectPass);
+    composer.addPass(new OutputPass());
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
@@ -576,7 +669,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { scene, camera, renderer, composer, effectPass, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
@@ -597,14 +690,15 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
       const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
     };
-    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
+    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
     let frame = 0;const demoStart=performance.now();
     const loop = (time=0) => {
       controls.update();
       const runtime=runtimeRef.current;
-      if(runtime?.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
-      if(runtime&&latestPropsRef.current.material==="ASCII"){
+      if(!runtime)return;
+      if(runtime.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
+      if(latestPropsRef.current.material==="ASCII"){
         renderer.domElement.style.opacity="0";
         asciiCanvas.style.display="block";
         if(time-runtime.asciiLastFrame>42){
@@ -616,12 +710,13 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       }else{
         renderer.domElement.style.opacity="1";
         asciiCanvas.style.display="none";
-        renderer.render(scene,camera);
+        const current=latestPropsRef.current;
+        if(current.effect==="None")renderer.render(scene,camera);else renderWithEffects(runtime,current);
       }
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {
