@@ -9,7 +9,8 @@ type GeometryMode = "Extrude" | "Revolve" | "Inflate";
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
 type Language = "en" | "ru";
 type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
-type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
+type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string; fontBlob?:Blob };
+type FontOption = { id:string; name:string; family:string; url:string; blob?:Blob; custom?:boolean };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
 type CustomBackground = { id:string; name:string; blob:Blob; source:string };
 type StoredShapeItem = Omit<ShapeItem,"source">;
@@ -19,7 +20,7 @@ type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[];
 const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,glassIor:1.5,glassTransparency:88,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@"};
 
 const ru:Record<string,string>={
-  "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Google Font":"Шрифт Google","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
+  "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
   "Text becomes real editable 3D outlines, including counters inside letters.":"Текст преобразуется в редактируемые 3D-контуры, включая полости внутри букв.","Transparent shapes with clean edges give the best extrusion.":"Прозрачные фигуры с чистыми краями дают лучший результат экструзии.",
   "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","LMB rotate · RMB pan · Scroll zoom":"ЛКМ — вращение · ПКМ — перемещение · Колесо — масштаб",
   "Properties":"Параметры","Reset all":"Сбросить всё","Copy Properties":"Копировать параметры","Paste Properties":"Вставить параметры","Geometry":"Геометрия","Extrude":"Экструзия","Revolve":"Вращение","Inflate":"Надувание","Thickness":"Толщина","Segments":"Сегменты","Surface detail":"Детализация поверхности","Edge":"Фаска","Mass":"Масса","Inflation":"Надувание",
@@ -30,7 +31,7 @@ const ru:Record<string,string>={
   "Gloss":"Глянец","Metal":"Металл","Glass":"Стекло","Wood":"Дерево","Stone":"Камень","Marble":"Мрамор","Leather":"Кожа","Concrete":"Бетон","Rubber":"Резина","Clay":"Глина","Chrome":"Хром",
   "Ready to export":"Готово к экспорту","Transparent background":"Прозрачный фон","Background included":"Фон включён","High quality":"Высокое качество","Transparent":"Прозрачный","Studio black":"Чёрный фон","Scene background":"Фон сцены","Interactive":"Интерактивный","ASCII graphic":"ASCII-графика","3D geometry":"3D-геометрия",
   "Standard":"Стандарт","Diffuse":"Рассеянный","Top Left":"Сверху слева","Right":"Справа","Drag to position light":"Перетащите источник света","Playtools are available on desktop only.":"Playtools доступен только на десктопе.","INTERACTIVE EMBED":"ИНТЕРАКТИВНЫЙ EMBED","Put this shape anywhere.":"Разместите эту фигуру где угодно.","Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.":"Скопируйте код и вставьте его на сайт. Модель сохранит вращение, материал и цвет.","Copy embed code":"Скопировать embed-код",
-  "All parameters reset":"Все параметры сброшены","Background uploaded":"Фон загружен","Background removed":"Фон удалён","Copy parameters first":"Сначала скопируйте параметры","Could not cache the shape library":"Не удалось сохранить библиотеку фигур","Could not read this JPG":"Не удалось прочитать JPG","Embed code copied":"Embed-код скопирован","Enter some text first":"Сначала введите текст","File is larger than 12 MB":"Файл больше 12 МБ","JPG materials only":"Поддерживаются только JPG-материалы","Material is larger than 8 MB":"Материал больше 8 МБ","Parameters copied":"Параметры скопированы","Parameters pasted":"Параметры вставлены","SVG and PNG files only":"Поддерживаются только SVG и PNG","Shape added to the library":"Фигура добавлена в библиотеку","Shape removed from the library":"Фигура удалена из библиотеки","Text shape added to the library":"Текстовая фигура добавлена в библиотеку","Transparent PNG exported":"Прозрачный PNG экспортирован","PNG with background exported":"PNG с фоном экспортирован","ASCII text exported":"ASCII-текст экспортирован","OBJ geometry exported":"OBJ-геометрия экспортирована"
+  "All parameters reset":"Все параметры сброшены","Background uploaded":"Фон загружен","Background removed":"Фон удалён","Copy parameters first":"Сначала скопируйте параметры","Could not cache the shape library":"Не удалось сохранить библиотеку фигур","Could not read this JPG":"Не удалось прочитать JPG","Could not read this font":"Не удалось прочитать шрифт","Embed code copied":"Embed-код скопирован","Enter some text first":"Сначала введите текст","File is larger than 12 MB":"Файл больше 12 МБ","Font is larger than 12 MB":"Шрифт больше 12 МБ","TTF and OTF files only":"Поддерживаются только TTF и OTF","Font added":"Шрифт добавлен","JPG materials only":"Поддерживаются только JPG-материалы","Material is larger than 8 MB":"Материал больше 8 МБ","Parameters copied":"Параметры скопированы","Parameters pasted":"Параметры вставлены","SVG and PNG files only":"Поддерживаются только SVG и PNG","Shape added to the library":"Фигура добавлена в библиотеку","Shape removed from the library":"Фигура удалена из библиотеки","Text shape added to the library":"Текстовая фигура добавлена в библиотеку","Transparent PNG exported":"Прозрачный PNG экспортирован","PNG with background exported":"PNG с фоном экспортирован","ASCII text exported":"ASCII-текст экспортирован","OBJ geometry exported":"OBJ-геометрия экспортирована"
 };
 
 const materials: { name: BuiltInMaterial; note: string }[] = [
@@ -59,19 +60,19 @@ const asciiCharacterSets:Record<Exclude<AsciiCharacterSet,"Custom Set">,string>=
   "Math & Symbols":"·−+×÷=≠≈<>≤≥∞∑∏√∫∆∇∂%#*&@",
 };
 const publicAsset = (path:string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/,"")}`;
-const googleFonts = [
-  {name:"Inter",family:"Inter",url:publicAsset("fonts/inter.ttf")},
-  {name:"Space Grotesk",family:"Studio Space",url:publicAsset("fonts/space-grotesk.ttf")},
-  {name:"Playfair Display",family:"Studio Playfair",url:publicAsset("fonts/playfair-display.ttf")},
-  {name:"Roboto Mono",family:"Studio Mono",url:publicAsset("fonts/roboto-mono.ttf")},
-  {name:"Bebas Neue",family:"Studio Bebas",url:publicAsset("fonts/bebas-neue.ttf")},
-  {name:"Pacifico",family:"Studio Pacifico",url:publicAsset("fonts/pacifico.ttf")},
-  {name:"Montserrat",family:"Studio Montserrat",url:publicAsset("fonts/montserrat.ttf")},
-  {name:"Rubik",family:"Studio Rubik",url:publicAsset("fonts/rubik.ttf")},
-  {name:"PT Sans",family:"Studio PT Sans",url:publicAsset("fonts/pt-sans.ttf")},
-  {name:"PT Serif",family:"Studio PT Serif",url:publicAsset("fonts/pt-serif.ttf")},
-  {name:"Arsenal",family:"Studio Arsenal",url:publicAsset("fonts/arsenal.ttf")},
-  {name:"Russo One",family:"Studio Russo One",url:publicAsset("fonts/russo-one.ttf")},
+const googleFonts:FontOption[] = [
+  {id:"inter",name:"Inter",family:"Inter",url:publicAsset("fonts/inter.ttf")},
+  {id:"space-grotesk",name:"Space Grotesk",family:"Studio Space",url:publicAsset("fonts/space-grotesk.ttf")},
+  {id:"playfair-display",name:"Playfair Display",family:"Studio Playfair",url:publicAsset("fonts/playfair-display.ttf")},
+  {id:"roboto-mono",name:"Roboto Mono",family:"Studio Mono",url:publicAsset("fonts/roboto-mono.ttf")},
+  {id:"bebas-neue",name:"Bebas Neue",family:"Studio Bebas",url:publicAsset("fonts/bebas-neue.ttf")},
+  {id:"pacifico",name:"Pacifico",family:"Studio Pacifico",url:publicAsset("fonts/pacifico.ttf")},
+  {id:"montserrat",name:"Montserrat",family:"Studio Montserrat",url:publicAsset("fonts/montserrat.ttf")},
+  {id:"rubik",name:"Rubik",family:"Studio Rubik",url:publicAsset("fonts/rubik.ttf")},
+  {id:"pt-sans",name:"PT Sans",family:"Studio PT Sans",url:publicAsset("fonts/pt-sans.ttf")},
+  {id:"pt-serif",name:"PT Serif",family:"Studio PT Serif",url:publicAsset("fonts/pt-serif.ttf")},
+  {id:"arsenal",name:"Arsenal",family:"Studio Arsenal",url:publicAsset("fonts/arsenal.ttf")},
+  {id:"russo-one",name:"Russo One",family:"Studio Russo One",url:publicAsset("fonts/russo-one.ttf")},
 ];
 
 const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image"};
@@ -157,6 +158,7 @@ export default function Home() {
   const [sourceMode, setSourceMode] = useState<"image"|"text">("image");
   const [textDraft, setTextDraft] = useState("SHAPE");
   const [fontDraft, setFontDraft] = useState(googleFonts[0].url);
+  const [customFonts,setCustomFonts]=useState<FontOption[]>([]);
   const [geometryMode,setGeometryMode]=useState<GeometryMode>("Extrude");
   const [thickness, setThickness] = useState(42);
   const [segments, setSegments] = useState(18);
@@ -202,6 +204,7 @@ export default function Home() {
   const [, setHistoryTick] = useState(0);
   const stageRef = useRef<StageHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const fontRef = useRef<HTMLInputElement>(null);
   const backgroundRef = useRef<HTMLInputElement>(null);
   const materialRef=useRef<HTMLInputElement>(null);
   const axisDragRef = useRef<{axis:"x"|"y"|"z";startX:number;startValue:number}|null>(null);
@@ -219,6 +222,8 @@ export default function Home() {
   materialsRef.current=customMaterials;
   const backgroundsRef=useRef(customBackgrounds);
   backgroundsRef.current=customBackgrounds;
+  const fontsRef=useRef(customFonts);
+  fontsRef.current=customFonts;
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
@@ -228,6 +233,8 @@ export default function Home() {
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
   const activeCustomBackground=customBackgrounds.find(item=>item.source===background);
+  const fontOptions=[...googleFonts,...customFonts];
+  const activeFont=fontOptions.find(item=>item.url===fontDraft)??googleFonts[0];
   const customMaterialUrl=activeCustomMaterial?.source;
   const isTexturedMaterial=textureMaterials.includes(material as BuiltInMaterial)||Boolean(activeCustomMaterial);
   const hasNormalMap=textureMaterials.includes(material as BuiltInMaterial);
@@ -240,18 +247,34 @@ export default function Home() {
     let cancelled=false;
     readStoredLibrary().then(saved=>{
       if(cancelled)return;
-      const restored=(saved?.items??[]).map(item=>({...item,source:item.blob?URL.createObjectURL(item.blob):null}));
+      const restoredFontMap=new Map<string,FontOption>();
+      const restored=(saved?.items??[]).map(item=>{
+        let fontUrl=item.fontUrl;
+        if(item.fontBlob){
+          const key=`${item.fontName??"Custom font"}:${item.fontBlob.size}:${item.fontBlob.type}`;
+          let font=restoredFontMap.get(key);
+          if(!font){
+            const id=`custom-${key.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}`;
+            font={id,name:item.fontName??"Custom font",family:item.fontFamily??`Playtools ${id}`,url:URL.createObjectURL(item.fontBlob),blob:item.fontBlob,custom:true};
+            restoredFontMap.set(key,font);
+          }
+          fontUrl=font.url;
+        }
+        return {...item,fontUrl,source:item.blob?URL.createObjectURL(item.blob):null};
+      });
+      const restoredFonts=[...restoredFontMap.values()];
+      restoredFonts.forEach(font=>{const face=new FontFace(font.family,`url("${font.url}")`);face.load().then(loaded=>document.fonts.add(loaded)).catch(()=>{});});
       const restoredMaterials=(saved?.materials??[]).map(item=>({...item,source:URL.createObjectURL(item.blob)}));
       const items=[demoShape,...restored];
       const target=items.find(item=>item.id===saved?.activeShapeId)??items[0];
-      setShapeItems(items);setCustomMaterials(restoredMaterials);setActiveShapeId(target.id);setSourceMode(target.kind==="text"?"text":"image");
+      setShapeItems(items);setCustomFonts(restoredFonts);setCustomMaterials(restoredMaterials);setActiveShapeId(target.id);setSourceMode(target.kind==="text"?"text":"image");
       if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}
       const params=target.params??{...defaultShapeParams};applyParams(params);resetHistory(params);
     }).catch(()=>{}).finally(()=>{if(!cancelled)setLibraryReady(true);});
     return()=>{cancelled=true;};
   },[]);
 
-  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);});materialsRef.current.forEach(item=>URL.revokeObjectURL(item.source));backgroundsRef.current.forEach(item=>URL.revokeObjectURL(item.source)); }, []);
+  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);});fontsRef.current.forEach(item=>URL.revokeObjectURL(item.url));materialsRef.current.forEach(item=>URL.revokeObjectURL(item.source));backgroundsRef.current.forEach(item=>URL.revokeObjectURL(item.source)); }, []);
 
   useEffect(()=>{
     const snapshot=JSON.parse(paramsSignature) as ShapeParams;
@@ -290,13 +313,34 @@ export default function Home() {
     flash("Shape added to the library");
   };
 
+  const importFont=async(file?:File)=>{
+    if(!file)return;
+    if(!/\.(ttf|otf)$/i.test(file.name)){flash("TTF and OTF files only");return;}
+    if(file.size>12*1024*1024){flash("Font is larger than 12 MB");return;}
+    const id=`font-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const source=URL.createObjectURL(file);
+    const name=file.name.replace(/\.(ttf|otf)$/i,"").slice(0,40)||"Custom font";
+    const font:FontOption={id,name,family:`Playtools ${id}`,url:source,blob:file,custom:true};
+    try{
+      const face=new FontFace(font.family,`url("${source}")`);
+      const loaded=await face.load();
+      document.fonts.add(loaded);
+      setCustomFonts(items=>[...items,font]);
+      setFontDraft(source);
+      flash("Font added");
+    }catch{
+      URL.revokeObjectURL(source);
+      flash("Could not read this font");
+    }
+  };
+
   const createTextShape = () => {
     const value=textDraft.trim();
     if(!value){flash("Enter some text first");return;}
-    const font=googleFonts.find(item=>item.url===fontDraft)??googleFonts[0];
+    const font=fontOptions.find(item=>item.url===fontDraft)??googleFonts[0];
     const label=value.replace(/\s+/g," ").slice(0,24);
     const params={...defaultShapeParams};
-    const item:ShapeItem={id:`text-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:`${label}.text`,source:null,kind:"text",text:value.slice(0,120),fontUrl:font.url,fontName:font.name,fontFamily:font.family,params};
+    const item:ShapeItem={id:`text-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:`${label}.text`,source:null,kind:"text",text:value.slice(0,120),fontUrl:font.url,fontName:font.name,fontFamily:font.family,fontBlob:font.blob,params};
     setShapeItems(items=>[...items,item]);setActiveShapeId(item.id);applyParams(params);resetHistory(params);flash("Text shape added to the library");
   };
 
@@ -385,8 +429,9 @@ export default function Home() {
           <div className="source-tabs"><button className={sourceMode==="image"?"active":""} onClick={()=>setSourceMode("image")}>{t("Image")}</button><button className={sourceMode==="text"?"active":""} onClick={()=>setSourceMode("text")}>{t("Text")}</button></div>
           {sourceMode==="image"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
             <span className="upload-icon">↗</span><strong>{t("Drop your shape")}</strong><small>SVG or PNG · max 12 MB</small>
-          </button>:<div className="text-source"><label><span>{t("Text")}</span><textarea aria-label={t("Text")} maxLength={120} rows={3} value={textDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>{t("Google Font")}</span><select aria-label={t("Google Font")} value={fontDraft} style={{fontFamily:(googleFonts.find(item=>item.url===fontDraft)??googleFonts[0]).family}} onChange={event=>setFontDraft(event.target.value)}>{googleFonts.map(font=><option key={font.url} value={font.url}>{font.name}</option>)}</select></label><button onClick={createTextShape}>{t("Create text shape")} <span>↗</span></button><small>Open Font License · ⌘ Enter</small></div>}
+          </button>:<div className="text-source"><label><span>{t("Text")}</span><textarea aria-label={t("Text")} maxLength={120} rows={3} value={textDraft} style={{fontFamily:activeFont.family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>{t("Font")}</span><select aria-label={t("Font")} value={fontDraft} style={{fontFamily:activeFont.family}} onChange={event=>setFontDraft(event.target.value)}><optgroup label={t("Google Fonts")}>{googleFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>{customFonts.length>0&&<optgroup label={t("Custom Fonts")}>{customFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>}</select></label><button className="font-upload" onClick={()=>fontRef.current?.click()}><span>＋ {t("Upload font")}</span><small>{t("TTF / OTF · max 12 MB")}</small></button><button className="create-text" onClick={createTextShape}>{t("Create text shape")} <span>↗</span></button><small>{activeFont.custom?"Local font":"Open Font License"} · ⌘ Enter</small></div>}
           <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
+          <input ref={fontRef} className="file-input" type="file" accept=".ttf,.otf,font/ttf,font/otf,application/x-font-ttf,application/x-font-opentype" onChange={event=>{void importFont(event.target.files?.[0]);event.currentTarget.value="";}} />
           <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src={publicAsset("rzw.svg")} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong>{item.name}</strong><small>{item.kind==="text"?item.fontName:t(item.demo?"Demo vector":"Imported image")}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}>×</button>}</div>)}</div>
           <div className="tip"><span>i</span><p>{t(sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion.")}</p></div>
           <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>

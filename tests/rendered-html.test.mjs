@@ -40,6 +40,9 @@ test("ships Playtools metadata, geometry controls, and OG image", async () => {
   assert.match(layout, /\/og\.png/);
   assert.match(layout, /width:\s*1200,\s*height:\s*630/);
   assert.match(page, /Create text shape/);
+  assert.match(page, /TTF and OTF files only/);
+  assert.match(page, /fontBlob/);
+  assert.match(page, /\.ttf,\.otf/);
   assert.match(page, /Geometry operation/);
   assert.match(page, /exportObj/);
   assert.match(packageJson, /"build:pages"/);
