@@ -9,10 +9,15 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".vinext/**",
+    ".wrangler/**",
+    "dist/**",
+    "dist-pages/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
   ]),
+  { rules: { "@next/next/no-img-element": "off", "@typescript-eslint/no-unused-vars": ["warn", { varsIgnorePattern: "^_", argsIgnorePattern: "^_" }] } },
 ]);
 
 export default eslintConfig;

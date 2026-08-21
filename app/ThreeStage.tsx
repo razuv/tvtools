@@ -186,16 +186,16 @@ function edgeLoops(data: Uint8ClampedArray, width: number, height: number) {
     while(edge&&!edge.used&&guard++<edges.length+1){
       edge.used=true;points.push(edge.to);
       if(edge.to[0]===first.from[0]&&edge.to[1]===first.from[1])break;
-      const candidates=(outgoing.get(key(edge.to[0],edge.to[1]))??[]).filter(candidate=>!candidate.used);
+      const candidates:Edge[]=(outgoing.get(key(edge.to[0],edge.to[1]))??[]).filter(candidate=>!candidate.used);
       if(!candidates.length){edge=undefined;break;}
-      const dx=edge.to[0]-edge.from[0],dy=edge.to[1]-edge.from[1];
+      const dx:number=edge.to[0]-edge.from[0],dy:number=edge.to[1]-edge.from[1];
       // At a diagonal pixel contact two contours share one vertex. Following
       // the strongest clockwise turn keeps each filled region on the left and
       // prevents the unrelated loops from being stitched into a false bridge.
-      edge=candidates.reduce((best,candidate)=>{
-        const turn=(item:Edge)=>Math.atan2(dx*(item.to[1]-item.from[1])-dy*(item.to[0]-item.from[0]),dx*(item.to[0]-item.from[0])+dy*(item.to[1]-item.from[1]));
+      edge=candidates.slice(1).reduce<Edge>((best,candidate):Edge=>{
+        const turn=(item:Edge):number=>Math.atan2(dx*(item.to[1]-item.from[1])-dy*(item.to[0]-item.from[0]),dx*(item.to[0]-item.from[0])+dy*(item.to[1]-item.from[1]));
         return turn(candidate)<turn(best)?candidate:best;
-      });
+      },candidates[0]);
     }
     if(points.length>12&&points[points.length-1][0]===points[0][0]&&points[points.length-1][1]===points[0][1]){points.pop();loops.push(points);}
   }
@@ -386,7 +386,7 @@ async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]>
     // one overlapping path (Inter's P is a common example). Resolve the
     // non-zero font fill with vector polygon union. This splits touching paths
     // into simple rings without ever passing through pixels or Canvas.
-    const paths=unionD(sourcePaths,FillRule.NonZero,4).map(path=>{
+    const paths=unionD(sourcePaths,[],FillRule.NonZero,4).map(path=>{
       const points=path.map(point=>[point.x,point.y]);
       return {points,area:Math.abs(signedArea(points))};
     }).filter(item=>item.points.length>=3&&item.area>1e-4).sort((a,b)=>b.area-a.area);
@@ -534,6 +534,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
   }));
 
+  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist,onLoading:onShapeLoading,onError:onShapeError}=props;
+
   useEffect(() => {
     const host = hostRef.current!;
     const scene = new THREE.Scene();
@@ -627,26 +629,26 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const build = async () => {
       const runtime = runtimeRef.current; if (!runtime) return;
       let shapes: THREE.Shape[];
-      try { shapes = props.text?.trim()&&props.fontUrl ? await textShapes(props.text,props.fontUrl) : props.source ? (props.fileName.toLowerCase().endsWith(".svg") ? await svgShapes(props.source) : await pngShapes(props.source, 48 + props.segments * 18)) : [polygonShape(demoPoints)]; }
+      try { shapes = shapeText?.trim()&&shapeFontUrl ? await textShapes(shapeText,shapeFontUrl) : shapeSource ? (shapeFileName.toLowerCase().endsWith(".svg") ? await svgShapes(shapeSource) : await pngShapes(shapeSource, 48 + shapeSegments * 18)) : [polygonShape(demoPoints)]; }
       catch (error) {
         console.error("Shape generation failed", error);
-        props.onLoading?.(false);
-        props.onError?.(error instanceof Error ? error.message : "Could not generate this shape");
+        onShapeLoading?.(false);
+        onShapeError?.(error instanceof Error ? error.message : "Could not generate this shape");
         return;
       }
       await new Promise(resolve=>window.setTimeout(resolve,70));
       if (cancelled || !runtimeRef.current) return;
-      const deforming=Math.abs(props.mass)+Math.abs(props.bend)+Math.abs(props.bulge)+Math.abs(props.taper)+Math.abs(props.twist)>0;
-      const requestId=++runtime.requestId;const heavy=props.geometryMode!=="Extrude"||props.segments>=64||(deforming&&props.surfaceDetail>=3)||props.mass>=70||props.edge>=180;props.onLoading?.(heavy);
+      const deforming=Math.abs(shapeMass)+Math.abs(shapeBend)+Math.abs(shapeBulge)+Math.abs(shapeTaper)+Math.abs(shapeTwist)>0;
+      const requestId=++runtime.requestId;const heavy=shapeGeometryMode!=="Extrude"||shapeSegments>=64||(deforming&&shapeSurfaceDetail>=3)||shapeMass>=70||shapeEdge>=180;onShapeLoading?.(heavy);
       // SVGLoader samples every curve separately, so a nominal value of 256
       // can otherwise create thousands of contour points per ring. Preserve
       // the requested visual detail while bounding the actual ring density.
-      const ringLimit=Math.min(1024,Math.max(48,48+props.segments));
-      const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(Math.max(3,props.segments)),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(Math.max(3,props.segments)),ringLimit).map(point=>[point.x,point.y]))}));
-      runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:props.geometryMode,thickness:props.thickness,segments:props.segments,surfaceDetail:props.surfaceDetail,edge:props.edge,mass:props.mass,inflateAmount:props.inflateAmount,bend:props.bend,bulge:props.bulge,taper:props.taper,twist:props.twist});
+      const ringLimit=Math.min(1024,Math.max(48,48+shapeSegments));
+      const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(Math.max(3,shapeSegments)),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(Math.max(3,shapeSegments)),ringLimit).map(point=>[point.x,point.y]))}));
+      runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
     };
     build(); return () => { cancelled = true; };
-  }, [props.source, props.fileName, props.text, props.fontUrl, props.geometryMode, props.thickness, props.segments, props.surfaceDetail, props.edge, props.mass, props.inflateAmount, props.bend, props.bulge, props.taper, props.twist]);
+  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeInflateAmount,shapeBend,shapeBulge,shapeTaper,shapeTwist,onShapeLoading,onShapeError]);
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
 
 type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Rubber" | "Clay" | "Chrome" | "ASCII";
@@ -222,7 +222,8 @@ export default function Home() {
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
-  const t=(value:string)=>language==="ru"?(ru[value]??value):value;
+  const t=useCallback((value:string)=>language==="ru"?(ru[value]??value):value,[language]);
+  const flash=useCallback((message:string)=>{setToast(t(message));window.setTimeout(()=>setToast(""),2200);},[t]);
   const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
@@ -232,7 +233,7 @@ export default function Home() {
   const hasNormalMap=textureMaterials.includes(material as BuiltInMaterial);
   const paramsSignature=JSON.stringify(currentParams);
 
-  useEffect(()=>{const saved=window.localStorage.getItem("playtools-language");if(saved==="ru"||saved==="en")setLanguage(saved);},[]);
+  useEffect(()=>{const saved=window.localStorage.getItem("playtools-language");if(saved!=="ru"&&saved!=="en")return;const timer=window.setTimeout(()=>setLanguage(saved),0);return()=>window.clearTimeout(timer);},[]);
   useEffect(()=>{window.localStorage.setItem("playtools-language",language);document.documentElement.lang=language;},[language]);
 
   useEffect(()=>{
@@ -271,12 +272,7 @@ export default function Home() {
       });
     },250);
     return()=>window.clearTimeout(timer);
-  },[shapeItems,customMaterials,activeShapeId,libraryReady]);
-
-  const flash = (message: string) => {
-    setToast(t(message));
-    window.setTimeout(() => setToast(""), 2200);
-  };
+  },[shapeItems,customMaterials,activeShapeId,libraryReady,flash]);
 
   const importFile = (file?: File) => {
     if (!file) return;

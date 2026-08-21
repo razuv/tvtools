@@ -1,3 +1,5 @@
+/// <reference lib="webworker" />
+
 import * as THREE from "three";
 import { mergeVertices, toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 
@@ -10,7 +12,7 @@ function makeShapes(sampled:ShapeData[]){
   const points=clean.flatMap(shape=>[shape.outer,...shape.holes]).flat().map(([x,y])=>new THREE.Vector2(x,y));
   const box=new THREE.Box2().setFromPoints(points);const center=box.getCenter(new THREE.Vector2());const size=box.getSize(new THREE.Vector2());const scale=3/Math.max(size.x,size.y,.001);
   const normalizedPoint=([px,py]:number[])=>[(px-center.x)*scale,(py-center.y)*scale];
-  const path=(target:THREE.Path,items:number[][])=>items.forEach((point,index)=>{const [x,y]=normalizedPoint(point);index?target.lineTo(x,y):target.moveTo(x,y);});
+  const path=(target:THREE.Path,items:number[][])=>items.forEach((point,index)=>{const [x,y]=normalizedPoint(point);if(index)target.lineTo(x,y);else target.moveTo(x,y);});
   const holeSizes=clean.flatMap(shape=>shape.holes).map(ring=>{const ringBox=new THREE.Box2().setFromPoints(ring.map(([x,y])=>new THREE.Vector2(x,y)));const ringSize=ringBox.getSize(new THREE.Vector2());return Math.min(ringSize.x,ringSize.y)*scale;});
   return {shapes:clean.map(data=>{const shape=new THREE.Shape();path(shape,data.outer);shape.closePath();data.holes.forEach(items=>{const hole=new THREE.Path();path(hole,items);hole.closePath();shape.holes.push(hole);});return shape;}),contours:clean.map(data=>({outer:data.outer.map(normalizedPoint),holes:data.holes.map(ring=>ring.map(normalizedPoint))})),size:new THREE.Vector2(size.x*scale,size.y*scale),holeLimit:holeSizes.length?Math.min(...holeSizes):Infinity,hasHoles:holeSizes.length>0};
 }
@@ -134,4 +136,5 @@ function build(data:GeometryRequest){
   const p=(geometry.attributes.position.array as Float32Array),n=(geometry.attributes.normal.array as Float32Array),uv=geometry.attributes.uv?(geometry.attributes.uv.array as Float32Array):new Float32Array();return {id:data.id,position:p,normal:n,uv,triangles:p.length/9};
 }
 
-(self as any).onmessage=(event:MessageEvent<GeometryRequest>)=>{try{const result=build(event.data);(self as any).postMessage(result,[result.position.buffer,result.normal.buffer,result.uv.buffer]);}catch(error){(self as any).postMessage({id:event.data.id,error:error instanceof Error?error.message:"Geometry error"});}};
+const workerScope=self as unknown as DedicatedWorkerGlobalScope;
+workerScope.onmessage=(event:MessageEvent<GeometryRequest>)=>{try{const result=build(event.data);workerScope.postMessage(result,[result.position.buffer,result.normal.buffer,result.uv.buffer]);}catch(error){workerScope.postMessage({id:event.data.id,error:error instanceof Error?error.message:"Geometry error"});}};
