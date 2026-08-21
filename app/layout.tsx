@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Playtools",
     description: "Turn SVG and PNG shapes into material-rich 3D objects, then export them anywhere.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/favicon.svg" },
-    openGraph: { title: "Playtools", description: "SVG, PNG or text in. Material-rich 3D out.", images: [{ url: image, width: 1536, height: 1024 }] },
+    openGraph: { title: "Playtools", description: "SVG, PNG or text in. Material-rich 3D out.", images: [{ url: image, width: 1200, height: 630 }] },
     twitter: { card: "summary_large_image", title: "Playtools", description: "SVG, PNG or text in. Material-rich 3D out.", images: [image] },
   };
 }

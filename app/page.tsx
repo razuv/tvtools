@@ -11,6 +11,7 @@ type Language = "en" | "ru";
 type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
+type CustomBackground = { id:string; name:string; blob:Blob; source:string };
 type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredCustomMaterial = Omit<CustomMaterial,"source">;
 type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
@@ -28,8 +29,8 @@ const ru:Record<string,string>={
   "Appearance":"Внешний вид","Color":"Цвет","Roughness":"Шероховатость","Color opacity":"Прозрачность цвета","Lighting":"Освещение","Strength":"Яркость","Ambient":"Окружение","Shadow softness":"Мягкость тени","Shadow opacity":"Прозрачность тени","Depth":"Глубина","Soft shadow":"Мягкая тень","Background":"Фон","Scene":"Сцена","None":"Нет","Custom":"Пользовательский","Upload":"Загрузить","Noir":"Нуар","Sky":"Небо","Sunset":"Закат","Gallery":"Галерея","Acid":"Кислотный",
   "Gloss":"Глянец","Metal":"Металл","Glass":"Стекло","Wood":"Дерево","Stone":"Камень","Marble":"Мрамор","Leather":"Кожа","Concrete":"Бетон","Rubber":"Резина","Clay":"Глина","Chrome":"Хром",
   "Ready to export":"Готово к экспорту","Transparent background":"Прозрачный фон","Background included":"Фон включён","High quality":"Высокое качество","Transparent":"Прозрачный","Studio black":"Чёрный фон","Scene background":"Фон сцены","Interactive":"Интерактивный","ASCII graphic":"ASCII-графика","3D geometry":"3D-геометрия",
-  "Standard":"Стандарт","Diffuse":"Рассеянный","Top Left":"Сверху слева","Right":"Справа","Drag to position light":"Перетащите источник света","Playtools is available on desktop devices only.":"Playtools доступен только на десктопных устройствах.","INTERACTIVE EMBED":"ИНТЕРАКТИВНЫЙ EMBED","Put this shape anywhere.":"Разместите эту фигуру где угодно.","Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.":"Скопируйте код и вставьте его на сайт. Модель сохранит вращение, материал и цвет.","Copy embed code":"Скопировать embed-код",
-  "All parameters reset":"Все параметры сброшены","Background uploaded":"Фон загружен","Copy parameters first":"Сначала скопируйте параметры","Could not cache the shape library":"Не удалось сохранить библиотеку фигур","Could not read this JPG":"Не удалось прочитать JPG","Embed code copied":"Embed-код скопирован","Enter some text first":"Сначала введите текст","File is larger than 12 MB":"Файл больше 12 МБ","JPG materials only":"Поддерживаются только JPG-материалы","Material is larger than 8 MB":"Материал больше 8 МБ","Parameters copied":"Параметры скопированы","Parameters pasted":"Параметры вставлены","SVG and PNG files only":"Поддерживаются только SVG и PNG","Shape added to the library":"Фигура добавлена в библиотеку","Shape removed from the library":"Фигура удалена из библиотеки","Text shape added to the library":"Текстовая фигура добавлена в библиотеку","Transparent PNG exported":"Прозрачный PNG экспортирован","PNG with background exported":"PNG с фоном экспортирован","ASCII text exported":"ASCII-текст экспортирован","OBJ geometry exported":"OBJ-геометрия экспортирована"
+  "Standard":"Стандарт","Diffuse":"Рассеянный","Top Left":"Сверху слева","Right":"Справа","Drag to position light":"Перетащите источник света","Playtools are available on desktop only.":"Playtools доступен только на десктопе.","INTERACTIVE EMBED":"ИНТЕРАКТИВНЫЙ EMBED","Put this shape anywhere.":"Разместите эту фигуру где угодно.","Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.":"Скопируйте код и вставьте его на сайт. Модель сохранит вращение, материал и цвет.","Copy embed code":"Скопировать embed-код",
+  "All parameters reset":"Все параметры сброшены","Background uploaded":"Фон загружен","Background removed":"Фон удалён","Copy parameters first":"Сначала скопируйте параметры","Could not cache the shape library":"Не удалось сохранить библиотеку фигур","Could not read this JPG":"Не удалось прочитать JPG","Embed code copied":"Embed-код скопирован","Enter some text first":"Сначала введите текст","File is larger than 12 MB":"Файл больше 12 МБ","JPG materials only":"Поддерживаются только JPG-материалы","Material is larger than 8 MB":"Материал больше 8 МБ","Parameters copied":"Параметры скопированы","Parameters pasted":"Параметры вставлены","SVG and PNG files only":"Поддерживаются только SVG и PNG","Shape added to the library":"Фигура добавлена в библиотеку","Shape removed from the library":"Фигура удалена из библиотеки","Text shape added to the library":"Текстовая фигура добавлена в библиотеку","Transparent PNG exported":"Прозрачный PNG экспортирован","PNG with background exported":"PNG с фоном экспортирован","ASCII text exported":"ASCII-текст экспортирован","OBJ geometry exported":"OBJ-геометрия экспортирована"
 };
 
 const materials: { name: BuiltInMaterial; note: string }[] = [
@@ -65,12 +66,12 @@ const googleFonts = [
   {name:"Roboto Mono",family:"Studio Mono",url:publicAsset("fonts/roboto-mono.ttf")},
   {name:"Bebas Neue",family:"Studio Bebas",url:publicAsset("fonts/bebas-neue.ttf")},
   {name:"Pacifico",family:"Studio Pacifico",url:publicAsset("fonts/pacifico.ttf")},
-  {name:"Montserrat · Cyrillic",family:"Studio Montserrat",url:publicAsset("fonts/montserrat.ttf")},
-  {name:"Rubik · Cyrillic",family:"Studio Rubik",url:publicAsset("fonts/rubik.ttf")},
-  {name:"PT Sans · Cyrillic",family:"Studio PT Sans",url:publicAsset("fonts/pt-sans.ttf")},
-  {name:"PT Serif · Cyrillic",family:"Studio PT Serif",url:publicAsset("fonts/pt-serif.ttf")},
-  {name:"Arsenal · Cyrillic",family:"Studio Arsenal",url:publicAsset("fonts/arsenal.ttf")},
-  {name:"Russo One · Cyrillic",family:"Studio Russo One",url:publicAsset("fonts/russo-one.ttf")},
+  {name:"Montserrat",family:"Studio Montserrat",url:publicAsset("fonts/montserrat.ttf")},
+  {name:"Rubik",family:"Studio Rubik",url:publicAsset("fonts/rubik.ttf")},
+  {name:"PT Sans",family:"Studio PT Sans",url:publicAsset("fonts/pt-sans.ttf")},
+  {name:"PT Serif",family:"Studio PT Serif",url:publicAsset("fonts/pt-serif.ttf")},
+  {name:"Arsenal",family:"Studio Arsenal",url:publicAsset("fonts/arsenal.ttf")},
+  {name:"Russo One",family:"Studio Russo One",url:publicAsset("fonts/russo-one.ttf")},
 ];
 
 const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image"};
@@ -115,7 +116,11 @@ function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ 
 }
 
 function ColorSwatch({color,selected,onChoose,onRemove}:{color:string;selected:boolean;onChoose:()=>void;onRemove:()=>void}){
-  return <span className="palette-swatch"><button aria-label={`Set color ${color}`} className={selected?"selected":""} style={{background:color}} onClick={onChoose}/><button className="palette-delete" aria-label={`Remove color ${color}`} onClick={(event)=>{event.stopPropagation();onRemove();}}>×</button></span>;
+  return <span className="palette-swatch"><button aria-label={`Set color ${color}`} className={selected?"selected":""} style={{background:color}} onClick={onChoose}/><button className="palette-delete" aria-label={`Remove color ${color}`} onPointerDown={(event)=>event.stopPropagation()} onMouseDown={(event)=>event.stopPropagation()} onClick={(event)=>{event.preventDefault();event.stopPropagation();onRemove();}}>×</button></span>;
+}
+
+function BackgroundSwatch({item,selected,onChoose,onRemove}:{item:CustomBackground;selected:boolean;onChoose:()=>void;onRemove:()=>void}){
+  return <span className="background-item"><button aria-label={`Use ${item.name}`} className={selected?"active":""} onClick={onChoose}><span style={{backgroundImage:`url(${item.source})`}}/><small>{item.name}</small></button><button className="background-delete" aria-label={`Remove ${item.name}`} onPointerDown={(event)=>event.stopPropagation()} onMouseDown={(event)=>event.stopPropagation()} onClick={(event)=>{event.preventDefault();event.stopPropagation();onRemove();}}>×</button></span>;
 }
 
 const lightPresets=[
@@ -187,6 +192,7 @@ export default function Home() {
   const [asciiCharacterSet,setAsciiCharacterSet]=useState<AsciiCharacterSet>("Letters + Numbers");
   const [asciiCustomSet,setAsciiCustomSet]=useState(" .:-=+*#%@");
   const [background, setBackground] = useState("None");
+  const [customBackgrounds,setCustomBackgrounds]=useState<CustomBackground[]>([]);
   const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
   const [triangles, setTriangles] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false);
@@ -205,11 +211,14 @@ export default function Home() {
   const suppressHistoryRef = useRef(false);
   const cacheWriteRef = useRef<Promise<void>>(Promise.resolve());
   const cacheErrorRef = useRef(false);
+  const backgroundCounterRef=useRef(1);
 
   const shapesRef = useRef(shapeItems);
   shapesRef.current=shapeItems;
   const materialsRef=useRef(customMaterials);
   materialsRef.current=customMaterials;
+  const backgroundsRef=useRef(customBackgrounds);
+  backgroundsRef.current=customBackgrounds;
   const activeShape=shapeItems.find(item=>item.id===activeShapeId)??shapeItems[0];
   const source=activeShape?.source??null;
   const fileName=activeShape?.name??"shape.svg";
@@ -217,6 +226,7 @@ export default function Home() {
   const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
+  const activeCustomBackground=customBackgrounds.find(item=>item.source===background);
   const customMaterialUrl=activeCustomMaterial?.source;
   const isTexturedMaterial=textureMaterials.includes(material as BuiltInMaterial)||Boolean(activeCustomMaterial);
   const hasNormalMap=textureMaterials.includes(material as BuiltInMaterial);
@@ -240,9 +250,7 @@ export default function Home() {
     return()=>{cancelled=true;};
   },[]);
 
-  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);});materialsRef.current.forEach(item=>URL.revokeObjectURL(item.source)); }, []);
-
-  useEffect(() => () => { if (background.startsWith("blob:")) URL.revokeObjectURL(background); }, [background]);
+  useEffect(() => () => { shapesRef.current.forEach(item=>{if(item.source?.startsWith("blob:"))URL.revokeObjectURL(item.source);});materialsRef.current.forEach(item=>URL.revokeObjectURL(item.source));backgroundsRef.current.forEach(item=>URL.revokeObjectURL(item.source)); }, []);
 
   useEffect(()=>{
     const snapshot=JSON.parse(paramsSignature) as ShapeParams;
@@ -298,9 +306,21 @@ export default function Home() {
 
   const importBackground = (file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
-    if (background.startsWith("blob:")) URL.revokeObjectURL(background);
-    setBackground(URL.createObjectURL(file));
+    const number=backgroundCounterRef.current++;
+    const source=URL.createObjectURL(file);
+    const item:CustomBackground={id:`background-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:`Custom ${number}`,blob:file,source};
+    setCustomBackgrounds(items=>[...items,item]);
+    setBackground(source);
     flash("Background uploaded");
+  };
+
+  const deleteBackground=(id:string)=>{
+    const target=customBackgrounds.find(item=>item.id===id);
+    if(!target)return;
+    setCustomBackgrounds(items=>items.filter(item=>item.id!==id));
+    if(background===target.source)setBackground("None");
+    window.setTimeout(()=>URL.revokeObjectURL(target.source),0);
+    flash("Background removed");
   };
 
   const importMaterial=async(file?:File)=>{
@@ -356,7 +376,7 @@ export default function Home() {
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
   const resetAll = () => { resetGeometry(); resetDeform(); resetMaterial(); resetAppearance(); resetLighting(); resetBackground(); resetView(); flash("All parameters reset"); };
-  const chooseColor = (next:string, add=true) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add&&!paletteColors.includes(normalized))setPaletteColors(items=>[...items,normalized]); };
+  const chooseColor = (next:string, add=true) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add)setPaletteColors(items=>items.includes(normalized)?items:[...items,normalized]); };
   const commitHex = () => { const value=hexDraft.trim(); if(/^#[0-9A-F]{6}$/i.test(value))chooseColor(value,true); else setHexDraft(color.toUpperCase()); };
 
   const embedCode = `<iframe src="https://shape3d.site/embed/${fileName.replace(/\W/g, "-")}" width="640" height="640" style="border:0" allow="fullscreen"></iframe>`;
@@ -447,7 +467,7 @@ export default function Home() {
             <summary><span>{t("Appearance")}</span><button onClick={(e)=>{e.preventDefault();resetAppearance();}} aria-label="Reset appearance">↺</button></summary>
             <div className="section-body">
               <div className="control-row"><span>{t("Color")}</span><output>{color.toUpperCase()}</output></div>
-              <div className="color-row">{paletteColors.map((item) => <ColorSwatch key={item} color={item} selected={color===item} onChoose={()=>chooseColor(item)} onRemove={()=>setPaletteColors(items=>items.filter(entry=>entry!==item))}/>)}<label className="custom-color">+<input aria-label="Custom color" type="color" value={color} onInput={(e) => chooseColor(e.currentTarget.value,true)} onChange={(e) => chooseColor(e.target.value,true)} /></label></div>
+              <div className="color-row">{paletteColors.map((item) => <ColorSwatch key={item} color={item} selected={color===item} onChoose={()=>chooseColor(item)} onRemove={()=>setPaletteColors(items=>items.filter(entry=>entry!==item))}/>)}<label className="custom-color">+<input aria-label="Custom color" type="color" value={color} onInput={(e) => chooseColor(e.currentTarget.value,true)} /></label></div>
               <label className="hex-control"><span>HEX</span><input aria-label="HEX color" value={hexDraft} maxLength={7} spellCheck={false} onChange={(e)=>setHexDraft(e.target.value.toUpperCase())} onBlur={commitHex} onKeyDown={(e)=>{if(e.key==="Enter"){commitHex();e.currentTarget.blur();}}}/></label>
               <div className="mini-controls">
                 <RangeControl label={t("Roughness")} value={roughness} min={0} max={100} suffix="%" onChange={setRoughness}/>
@@ -472,9 +492,9 @@ export default function Home() {
           <details className="property-section" open>
             <summary><span>{t("Background")}</span><button onClick={(e)=>{e.preventDefault();resetBackground();}} aria-label="Reset background">↺</button></summary>
             <div className="section-body">
-              <div className="control-row"><span>{t("Scene")}</span><output>{t(background.startsWith("blob:") ? "Custom" : background)}</output></div>
-              <div className="backgrounds"><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span>×</span><small>{t("None")}</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{t(item)}</small></button>)}<button className={background.startsWith("blob:") ? "active upload-bg" : "upload-bg"} onClick={() => backgroundRef.current?.click()}><span>+</span><small>{t("Upload")}</small></button></div>
-              <input ref={backgroundRef} className="file-input" type="file" accept="image/*" onChange={(e) => importBackground(e.target.files?.[0])} />
+              <div className="control-row"><span>{t("Scene")}</span><output>{activeCustomBackground?.name??t(background)}</output></div>
+              <div className="backgrounds"><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span>×</span><small>{t("None")}</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{t(item)}</small></button>)}{customBackgrounds.map(item=><BackgroundSwatch key={item.id} item={item} selected={background===item.source} onChoose={()=>setBackground(item.source)} onRemove={()=>deleteBackground(item.id)}/>)}<button className="upload-bg" onClick={() => backgroundRef.current?.click()}><span>+</span><small>{t("Upload")}</small></button></div>
+              <input ref={backgroundRef} className="file-input" type="file" accept="image/*" onChange={(e) => {importBackground(e.target.files?.[0]);e.currentTarget.value="";}} />
             </div>
           </details>
         </aside>
@@ -494,8 +514,8 @@ export default function Home() {
       <section className="mobile-gate" aria-label="Desktop only">
         <div className="mobile-logo"><img src={publicAsset("favicon.svg")} alt="Playtools logo"/></div>
         <h1>Playtools</h1>
-        <p>{t("Playtools is available on desktop devices only.")}</p>
-        <a href="https://razuvaev.me" target="_blank" rel="noreferrer">Alexey Razuvaev ↗</a>
+        <p>{t("Playtools are available on desktop only.")}</p>
+        <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
       </section>
 
       {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>{t("Show UI")}</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}>↓ PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}>▣ PNG + BG</button>{material==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}>≡ TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}>↗ OBJ</button></div>}
