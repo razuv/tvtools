@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Build static site
-        run: npm run build:pages
+        run: npm run build
         env:
           PLAYTOOLS_PAGES_BASE: /tvtools/
       - name: Configure Pages

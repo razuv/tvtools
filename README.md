@@ -11,14 +11,13 @@ npm install
 npm run dev
 ```
 
-## Builds
+## Production build
 
 ```bash
 npm run build
-npm run build:pages
 ```
 
-`npm run build` creates the hosted vinext application. `npm run build:pages` creates a fully static GitHub Pages build in `dist-pages`.
+`npm run build` creates the fully static application in `dist-pages`. Use `npm run preview` to test that build locally.
 
 ## GitHub Pages
 
