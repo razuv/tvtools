@@ -553,7 +553,7 @@ export default function Home() {
           <div className="panel-heading properties-heading"><span>02</span><h2>{t("Properties")}</h2><button className="reset-all" onClick={resetAll}>↺ {t("Reset all")}</button></div>
           <div className="parameter-clipboard"><button onClick={copyParams}>{t("Copy Properties")}</button><button onClick={pasteParams}>{t("Paste Properties")}</button></div>
 
-          <details className="property-section" open>
+          <details className="property-section geometry-section" open>
             <summary><span>{t("Geometry")}</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry">↺</button></summary>
             <div className="section-body stack-controls">
               <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><i className={mode.toLowerCase()}/><span>{t(mode)}{mode!=="Extrude"&&<em>BETA</em>}</span></button>)}</div>
@@ -566,7 +566,7 @@ export default function Home() {
             </div>
           </details>
 
-          {activeShape?.kind==="text"&&<details className="property-section" open>
+          {activeShape?.kind==="text"&&<details className="property-section typography-section" open>
             <summary><span>{t("Typography")}</span><button onClick={(e)=>{e.preventDefault();resetTypography();}} aria-label="Reset typography">↺</button></summary>
             <div className="section-body stack-controls">
               <RangeControl label={t("Font weight")} value={fontWeight} min={100} max={900} step={100} onChange={setFontWeight}/>
@@ -575,7 +575,7 @@ export default function Home() {
             </div>
           </details>}
 
-          <details className="property-section" open>
+          <details className="property-section effects-section" open>
             <summary><span>{t("Effects")}</span><button onClick={(e)=>{e.preventDefault();resetEffects();}} aria-label="Reset effects">↺</button></summary>
             <div className="section-body effects-body">
               <div className={`effects-grid ${material==="ASCII"?"disabled":""}`} role="group" aria-label="Post-processing effect">{postEffects.map(item=><button key={item.name} className={effect===item.name?"active":""} disabled={material==="ASCII"} onClick={()=>setEffect(item.name)}><i>{item.symbol}</i><span>{t(item.name)}</span></button>)}</div>
@@ -583,7 +583,7 @@ export default function Home() {
             </div>
           </details>
 
-          <details className="property-section" open>
+          <details className="property-section deform-section" open>
             <summary><span>{t("Deform")}</span><button onClick={(e)=>{e.preventDefault();resetDeform();}} aria-label="Reset deformation">↺</button></summary>
             <div className="section-body deform-grid">
               <RangeControl label={t("Bend")} value={bend} min={-120} max={120} suffix="°" onChange={setBend}/>
@@ -593,7 +593,7 @@ export default function Home() {
             </div>
           </details>
 
-          <details className="property-section" open>
+          <details className="property-section material-section" open>
             <summary><span>{t("Material")}</span><button onClick={(e)=>{e.preventDefault();resetMaterial();}} aria-label="Reset material">↺</button></summary>
             <div className="section-body">
               <div className="control-row"><span>{t("Surface")}</span><output>{activeCustomMaterial?.name??t(material)}</output></div>
@@ -617,7 +617,7 @@ export default function Home() {
             </div>
           </details>
 
-          <details className="property-section" open>
+          <details className="property-section appearance-section" open>
             <summary><span>{t("Appearance")}</span><button onClick={(e)=>{e.preventDefault();resetAppearance();}} aria-label="Reset appearance">↺</button></summary>
             <div className="section-body">
               <div className="control-row"><span>{t("Color")}</span><output>{color.toUpperCase()}</output></div>
@@ -630,7 +630,7 @@ export default function Home() {
             </div>
           </details>
 
-          <details className="property-section" open>
+          <details className="property-section lighting-section" open>
             <summary><span>{t("Lighting")}</span><button onClick={(e)=>{e.preventDefault();resetLighting();}} aria-label="Reset lighting">↺</button></summary>
             <div className="section-body stack-controls">
               <LightDirectionControl x={lightX} y={lightY} z={lightZ} t={t} onChange={next=>{setLightX(next.x);setLightY(next.y);setLightZ(next.z);}}/>
@@ -643,7 +643,7 @@ export default function Home() {
             </div>
           </details>
 
-          <details className="property-section" open>
+          <details className="property-section background-section" open>
             <summary><span>{t("Background")}</span><button onClick={(e)=>{e.preventDefault();resetBackground();}} aria-label="Reset background">↺</button></summary>
             <div className="section-body">
               <div className="control-row"><span>{t("Scene")}</span><output>{activeCustomBackground?.name??t(background)}</output></div>

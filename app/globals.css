@@ -34,7 +34,7 @@ button { color:inherit; }
 .panel { background:var(--panel); padding:20px; min-width:0; min-height:0; }
 .import-panel { border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
 .import-panel>.panel-heading,.import-panel>.source-tabs,.import-panel>.dropzone,.import-panel>.text-source,.import-panel>.tip{flex:0 0 auto}
-.properties-panel { height:100%; border-left:1px solid var(--line); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:17px; scrollbar-width:thin; scrollbar-color:#3b3b3b transparent; }
+.properties-panel { height:100%; border-left:1px solid var(--line); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:17px; scrollbar-width:thin; scrollbar-color:#3b3b3b transparent; display:flex; flex-direction:column; }
 .panel-heading { display:flex; align-items:center; gap:11px; margin-bottom:20px; }
 .panel-heading span, .export-title>span { width:24px; height:24px; display:grid; place-items:center; border:1px solid #383838; border-radius:50%; color:#9b9b9b; font:9px var(--font-mono); }
 .panel-heading h2 { margin:0; font-size:13px; letter-spacing:-.01em; }
@@ -111,7 +111,8 @@ input[type="range"]::-moz-range-track { height:2px; background:transparent; }
 input[type="range"]::-moz-range-thumb { width:9px; height:9px; border:1px solid #0a0a0a; border-radius:50%; background:#e0e0e0; box-shadow:0 0 0 1px #555; }
 .rule { height:1px; background:var(--line); margin:19px 0; }
 .section-label { color:var(--lime); font:8px var(--font-mono); letter-spacing:.11em; margin-bottom:13px; }
-.property-section { border-bottom:1px solid var(--line); }
+.property-section { border-bottom:1px solid var(--line); flex:none; }
+.properties-heading{order:0}.parameter-clipboard{order:1}.geometry-section{order:2}.deform-section{order:3}.typography-section{order:4}.appearance-section{order:5}.material-section{order:6}.effects-section{order:7}.lighting-section{order:8}.background-section{order:9}
 .properties-panel>.property-section:last-of-type{border-bottom:0}
 .parameter-clipboard { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:0 0 8px; }
 .parameter-clipboard button { height:30px; border:1px solid #303030; border-radius:6px; background:#131313; color:#aaa; cursor:pointer; font:8px var(--font-mono); }.parameter-clipboard button:hover{border-color:#777;color:#fff}
