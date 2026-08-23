@@ -11,10 +11,11 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js";
-import { FillRule, simplifyPathD, unionD, type PathD } from "clipper2-ts";
+import { EndType, FillRule, inflatePathsD, JoinType, simplifyPathD, unionD, type PathD } from "clipper2-ts";
 
 export type StageHandle = {
   reset: () => void;
+  center: () => void;
   rotate: (axis: "x" | "y" | "z", amount?: number) => void;
   setRotation: (axis: "x" | "y" | "z", degrees: number) => void;
   exportPng: (name: string, withBackground?: boolean) => void;
@@ -27,6 +28,9 @@ type StageProps = {
   fileName: string;
   text?: string;
   fontUrl?: string;
+  fontWeight: number;
+  letterSpacing: number;
+  lineSpacing: number;
   geometryMode: "Extrude" | "Revolve" | "Inflate";
   thickness: number;
   material: string;
@@ -62,6 +66,7 @@ type StageProps = {
   asciiGlyphs: string;
   effect: string;
   effectIntensity: number;
+  effectBackground: boolean;
   background: string;
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
@@ -75,6 +80,7 @@ type Runtime = {
   renderer: THREE.WebGLRenderer;
   composer: EffectComposer;
   effectPass: ShaderPass;
+  backgroundTarget: THREE.WebGLRenderTarget;
   controls: OrbitControls;
   model: THREE.Group;
   key: THREE.DirectionalLight;
@@ -90,20 +96,24 @@ type Runtime = {
   lastRotationEmit: number;
 };
 
-const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5};
+const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Scanlines:8,Glow:9};
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
+    tBackground:{value:null},
     resolution:{value:new THREE.Vector2(1,1)},
     mode:{value:0},
     intensity:{value:1},
+    compositeBackground:{value:0},
   },
   vertexShader:`varying vec2 vUv;
     void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`uniform sampler2D tDiffuse;
+    uniform sampler2D tBackground;
     uniform vec2 resolution;
     uniform float mode;
     uniform float intensity;
+    uniform float compositeBackground;
     varying vec2 vUv;
     float luma(vec3 color){return dot(color,vec3(.2126,.7152,.0722));}
     float sobel(vec2 uv){
@@ -138,28 +148,72 @@ const postEffectShader={
         float cell=mix(5.0,15.0,amount);
         vec2 grid=floor(vUv*resolution/cell)*cell/resolution;
         vec4 sampleColor=texture2D(tDiffuse,grid+cell*.5/resolution);
+        if(sampleColor.a<.04)sampleColor=base;
         vec2 point=fract(vUv*resolution/cell)-.5;
         float radius=mix(.08,.48,1.0-luma(sampleColor.rgb));
         float dotMask=1.0-smoothstep(radius,radius+.08,length(point));
         vec3 printColor=mix(vec3(1.0),sampleColor.rgb*.35,dotMask);
-        result=mix(base.rgb,printColor,amount);
+        result=printColor;
       }else if(mode>3.5&&mode<4.5){
         float cell=mix(2.0,28.0,amount);
         vec2 pixelUv=(floor(vUv*resolution/cell)+.5)*cell/resolution;
-        result=mix(base.rgb,texture2D(tDiffuse,pixelUv).rgb,amount);
-      }else if(mode>4.5){
+        vec4 pixel=texture2D(tDiffuse,pixelUv);
+        result=pixel.a>.04?pixel.rgb:base.rgb;
+      }else if(mode>4.5&&mode<5.5){
         vec2 offset=vec2(1.0,0.35)/max(resolution,vec2(1.0))*amount*12.0;
         vec3 split=vec3(texture2D(tDiffuse,vUv+offset).r,base.g,texture2D(tDiffuse,vUv-offset).b);
         result=mix(base.rgb,split,amount);
+      }else if(mode>5.5&&mode<6.5){
+        float lightness=luma(base.rgb);
+        vec3 duo=mix(vec3(.035,.045,.075),vec3(.96,.48,.25),smoothstep(.08,.92,lightness));
+        result=mix(base.rgb,duo,amount);
+      }else if(mode>6.5&&mode<7.5){
+        vec2 p=mod(floor(gl_FragCoord.xy),4.0);
+        float index=p.x+p.y*4.0;
+        float threshold=fract(index*.61803398875);
+        float value=step(threshold,mix(luma(base.rgb),dot(base.rgb,vec3(.333)),amount));
+        result=mix(base.rgb,vec3(value),amount);
+      }else if(mode>7.5&&mode<8.5){
+        float line=.72+.28*sin(gl_FragCoord.y*3.14159);
+        float roll=.94+.06*sin(vUv.y*18.0+vUv.x*3.0);
+        result=base.rgb*mix(1.0,line*roll,amount);
+      }else if(mode>8.5){
+        vec2 t=1.0/max(resolution,vec2(1.0))*mix(2.0,8.0,amount);
+        vec3 glow=texture2D(tDiffuse,vUv+vec2(t.x,0.0)).rgb+texture2D(tDiffuse,vUv-vec2(t.x,0.0)).rgb+texture2D(tDiffuse,vUv+vec2(0.0,t.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.0,t.y)).rgb;
+        result=base.rgb+glow*.12*amount;
       }
-      gl_FragColor=vec4(result,base.a);
+      vec4 outputColor=vec4(result,base.a);
+      if(compositeBackground>.5){
+        vec4 background=texture2D(tBackground,vUv);
+        outputColor=vec4(outputColor.rgb*outputColor.a+background.rgb*(1.0-outputColor.a),outputColor.a+background.a*(1.0-outputColor.a));
+      }
+      gl_FragColor=outputColor;
     }`,
 };
 
-function renderWithEffects(runtime:Runtime,props:StageProps){
+function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true){
   runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
   runtime.effectPass.uniforms.intensity.value=props.effectIntensity/100;
   runtime.effectPass.uniforms.resolution.value.set(runtime.renderer.domElement.width,runtime.renderer.domElement.height);
+  const isolateModel=!includeBackground||!props.effectBackground;
+  if(isolateModel){
+    const background=runtime.scene.background;
+    const modelVisible=runtime.model.visible;
+    const floorVisible=runtime.shadowFloor.visible;
+    if(includeBackground){
+      runtime.model.visible=false;runtime.shadowFloor.visible=false;
+      runtime.renderer.setRenderTarget(runtime.backgroundTarget);
+      runtime.renderer.clear();runtime.renderer.render(runtime.scene,runtime.camera);
+      runtime.renderer.setRenderTarget(null);
+      runtime.effectPass.uniforms.tBackground.value=runtime.backgroundTarget.texture;
+      runtime.effectPass.uniforms.compositeBackground.value=1;
+    }else runtime.effectPass.uniforms.compositeBackground.value=0;
+    runtime.scene.background=null;runtime.model.visible=modelVisible;runtime.shadowFloor.visible=floorVisible;
+    runtime.composer.render();
+    runtime.scene.background=background;
+    return;
+  }
+  runtime.effectPass.uniforms.compositeBackground.value=0;
   runtime.composer.render();
 }
 
@@ -419,7 +473,7 @@ function rasterShapes(data: Uint8ClampedArray, width: number, height: number, ta
 async function svgShapes(url: string): Promise<THREE.Shape[]> {
   const text = await fetch(url).then((response) => response.text());
   const parsed = new SVGLoader().parse(text);
-  const shapes = parsed.paths.flatMap((path) => SVGLoader.createShapes(path));
+  const shapes = parsed.paths.flatMap((path) => path.toShapes());
   if (!shapes.length) throw new Error("No closed SVG paths found");
   return shapes;
 }
@@ -433,7 +487,7 @@ function loadFont(url: string) {
   });
 }
 
-async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]> {
+async function textShapes(text: string, fontUrl: string, fontWeight=400, letterSpacing=0, lineSpacing=118): Promise<THREE.Shape[]> {
   if (!fontCache.has(fontUrl)) fontCache.set(fontUrl, loadFont(fontUrl));
   const font = await fontCache.get(fontUrl)!;
   const fallbackUrl=`${import.meta.env.BASE_URL}fonts/inter.ttf`;
@@ -467,7 +521,9 @@ async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]>
     // one overlapping path (Inter's P is a common example). Resolve the
     // non-zero font fill with vector polygon union. This splits touching paths
     // into simple rings without ever passing through pixels or Canvas.
-    const paths=unionD(sourcePaths,[],FillRule.NonZero,4).map(path=>{
+    const resolved=unionD(sourcePaths,[],FillRule.NonZero,4);
+    const weighted=Math.abs(fontWeight-400)<1?resolved:inflatePathsD(resolved,(fontWeight-400)*.12,JoinType.Round,EndType.Polygon,2,4);
+    const paths=unionD(weighted,[],FillRule.NonZero,4).map(path=>{
       const points=path.map(point=>[point.x,point.y]);
       return {points,area:Math.abs(signedArea(points))};
     }).filter(item=>item.points.length>=3&&item.area>1e-4).sort((a,b)=>b.area-a.area);
@@ -488,10 +544,11 @@ async function textShapes(text: string, fontUrl: string): Promise<THREE.Shape[]>
     const glyphs=Array.from(line||" ").map(character=>{const primary=font.charToGlyph(character);return primary.index!==0||character===" "?{glyph:primary,font}:{glyph:fallback.charToGlyph(character),font:fallback};});
     let cursor=0;
     glyphs.forEach((entry,glyphIndex)=>{
-      const path=entry.glyph.getPath(cursor,index*1180,1000,{},entry.font);
+      const path=entry.glyph.getPath(cursor,index*1000*(lineSpacing/100),1000,{},entry.font);
       if(path.commands.length)shapes.push(...vectorGlyphShapes(path.commands));
       cursor+=(entry.glyph.advanceWidth??entry.font.unitsPerEm)*1000/entry.font.unitsPerEm;
       const next=glyphs[glyphIndex+1];if(next&&next.font===entry.font)cursor+=entry.font.getKerningValue(entry.glyph,next.glyph)*1000/entry.font.unitsPerEm;
+      if(glyphIndex<glyphs.length-1)cursor+=letterSpacing*10;
     });
   });
   if(!shapes.length)throw new Error("Text contains no supported glyphs");
@@ -578,6 +635,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       runtime.controls.target.set(0, 0, 0); runtime.controls.update();
       latestPropsRef.current.onRotationChange?.({x:0,y:0,z:0});
     },
+    center(){
+      const runtime=runtimeRef.current;if(!runtime)return;
+      runtime.autoRotate=false;
+      const offset=runtime.camera.position.clone().sub(runtime.controls.target);
+      runtime.controls.target.set(0,0,0);runtime.camera.position.copy(offset);runtime.controls.update();
+    },
     rotate(axis, amount = 15) { const runtime = runtimeRef.current; if (runtime) {runtime.autoRotate=false;runtime.model.rotation[axis] += THREE.MathUtils.degToRad(amount);latestPropsRef.current.onRotationChange?.({x:THREE.MathUtils.radToDeg(runtime.model.rotation.x),y:THREE.MathUtils.radToDeg(runtime.model.rotation.y),z:THREE.MathUtils.radToDeg(runtime.model.rotation.z)});}},
     setRotation(axis,degrees){const runtime=runtimeRef.current;if(runtime){runtime.autoRotate=false;runtime.model.rotation[axis]=THREE.MathUtils.degToRad(degrees);latestPropsRef.current.onRotationChange?.({x:THREE.MathUtils.radToDeg(runtime.model.rotation.x),y:THREE.MathUtils.radToDeg(runtime.model.rotation.y),z:THREE.MathUtils.radToDeg(runtime.model.rotation.z)});}},
     exportPng(name, withBackground = false) {
@@ -595,12 +658,16 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         const current=latestPropsRef.current;
         runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;
         runtime.composer.setSize(1400,1400);
-        if(current.effect==="None")runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current);
+        const exportDrawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());
+        runtime.backgroundTarget.setSize(exportDrawing.x,exportDrawing.y);
+        if(current.effect==="None")runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current,withBackground);
       }
       output.toBlob((blob) => {
         if (blob) downloadBlob(blob, `${name}.png`);
         runtime.renderer.setSize(width, height, false);
         runtime.composer.setSize(width,height);
+        const restoredDrawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());
+        runtime.backgroundTarget.setSize(restoredDrawing.x,restoredDrawing.y);
         runtime.camera.aspect = width / Math.max(1, height);
         runtime.camera.updateProjectionMatrix();
         runtime.scene.background=oldBackground;
@@ -621,7 +688,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
   }));
 
-  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist,onLoading:onShapeLoading,onError:onShapeError}=props;
+  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,fontWeight:shapeFontWeight,letterSpacing:shapeLetterSpacing,lineSpacing:shapeLineSpacing,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist,onLoading:onShapeLoading,onError:onShapeError}=props;
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -641,6 +708,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const effectPass=new ShaderPass(postEffectShader);
     composer.addPass(effectPass);
     composer.addPass(new OutputPass());
+    const backgroundTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat});
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
@@ -669,7 +737,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, composer, effectPass, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
@@ -690,7 +758,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
       const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
     };
-    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
+    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
     let frame = 0;const demoStart=performance.now();
     const loop = (time=0) => {
@@ -711,12 +779,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         renderer.domElement.style.opacity="1";
         asciiCanvas.style.display="none";
         const current=latestPropsRef.current;
-        if(current.effect==="None")renderer.render(scene,camera);else renderWithEffects(runtime,current);
+        if(current.effect==="None")renderer.render(scene,camera);else renderWithEffects(runtime,current,true);
       }
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -724,7 +792,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const build = async () => {
       const runtime = runtimeRef.current; if (!runtime) return;
       let shapes: THREE.Shape[];
-      try { shapes = shapeText?.trim()&&shapeFontUrl ? await textShapes(shapeText,shapeFontUrl) : shapeSource ? (shapeFileName.toLowerCase().endsWith(".svg") ? await svgShapes(shapeSource) : await pngShapes(shapeSource, 48 + shapeSegments * 18)) : [polygonShape(demoPoints)]; }
+      try { shapes = shapeText?.trim()&&shapeFontUrl ? await textShapes(shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing) : shapeSource ? (shapeFileName.toLowerCase().endsWith(".svg") ? await svgShapes(shapeSource) : await pngShapes(shapeSource, 48 + shapeSegments * 18)) : [polygonShape(demoPoints)]; }
       catch (error) {
         console.error("Shape generation failed", error);
         onShapeLoading?.(false);
@@ -743,7 +811,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
     };
     build(); return () => { cancelled = true; };
-  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeInflateAmount,shapeBend,shapeBulge,shapeTaper,shapeTwist,onShapeLoading,onShapeError]);
+  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeInflateAmount,shapeBend,shapeBulge,shapeTaper,shapeTwist,onShapeLoading,onShapeError]);
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
