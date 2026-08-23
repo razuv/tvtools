@@ -30,6 +30,8 @@ test("ships the editor features and public assets", async () => {
   assert.match(page, /window\.addEventListener\("paste"/);
   assert.doesNotMatch(page, /className="figma-paste"/);
   assert.match(page, /Affect background/);
+  assert.match(page, /Second tone/);
+  assert.doesNotMatch(page, /name:"Scanlines"/);
   assert.match(page, /Letter spacing/);
   assert.match(page, /TTF and OTF files only/);
   assert.match(page, /Geometry operation/);

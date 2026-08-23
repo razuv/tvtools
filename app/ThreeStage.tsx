@@ -67,6 +67,7 @@ type StageProps = {
   effect: string;
   effectIntensity: number;
   effectBackground: boolean;
+  duotoneColor: string;
   background: string;
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
@@ -96,7 +97,7 @@ type Runtime = {
   lastRotationEmit: number;
 };
 
-const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Scanlines:8,Glow:9};
+const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Glow:8};
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
@@ -105,6 +106,8 @@ const postEffectShader={
     mode:{value:0},
     intensity:{value:1},
     compositeBackground:{value:0},
+    expandCellAlpha:{value:0},
+    duotoneColor:{value:new THREE.Color("#ff7a45")},
   },
   vertexShader:`varying vec2 vUv;
     void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
@@ -114,6 +117,8 @@ const postEffectShader={
     uniform float mode;
     uniform float intensity;
     uniform float compositeBackground;
+    uniform float expandCellAlpha;
+    uniform vec3 duotoneColor;
     varying vec2 vUv;
     float luma(vec3 color){return dot(color,vec3(.2126,.7152,.0722));}
     float sobel(vec2 uv){
@@ -134,6 +139,7 @@ const postEffectShader={
       vec4 base=texture2D(tDiffuse,vUv);
       float amount=clamp(intensity,0.0,1.0);
       vec3 result=base.rgb;
+      float outputAlpha=base.a;
       if(mode>0.5&&mode<1.5){
         float levels=mix(7.0,3.0,amount);
         vec3 quantized=floor(base.rgb*levels+.5)/levels;
@@ -148,24 +154,25 @@ const postEffectShader={
         float cell=mix(5.0,15.0,amount);
         vec2 grid=floor(vUv*resolution/cell)*cell/resolution;
         vec4 sampleColor=texture2D(tDiffuse,grid+cell*.5/resolution);
-        if(sampleColor.a<.04)sampleColor=base;
         vec2 point=fract(vUv*resolution/cell)-.5;
         float radius=mix(.08,.48,1.0-luma(sampleColor.rgb));
         float dotMask=1.0-smoothstep(radius,radius+.08,length(point));
         vec3 printColor=mix(vec3(1.0),sampleColor.rgb*.35,dotMask);
         result=printColor;
+        outputAlpha=mix(base.a,dotMask*sampleColor.a,expandCellAlpha);
       }else if(mode>3.5&&mode<4.5){
         float cell=mix(2.0,28.0,amount);
         vec2 pixelUv=(floor(vUv*resolution/cell)+.5)*cell/resolution;
         vec4 pixel=texture2D(tDiffuse,pixelUv);
         result=pixel.a>.04?pixel.rgb:base.rgb;
+        outputAlpha=mix(base.a,pixel.a,expandCellAlpha);
       }else if(mode>4.5&&mode<5.5){
         vec2 offset=vec2(1.0,0.35)/max(resolution,vec2(1.0))*amount*12.0;
         vec3 split=vec3(texture2D(tDiffuse,vUv+offset).r,base.g,texture2D(tDiffuse,vUv-offset).b);
         result=mix(base.rgb,split,amount);
       }else if(mode>5.5&&mode<6.5){
         float lightness=luma(base.rgb);
-        vec3 duo=mix(vec3(.035,.045,.075),vec3(.96,.48,.25),smoothstep(.08,.92,lightness));
+        vec3 duo=mix(vec3(.035,.045,.075),duotoneColor,smoothstep(.08,.92,lightness));
         result=mix(base.rgb,duo,amount);
       }else if(mode>6.5&&mode<7.5){
         vec2 p=mod(floor(gl_FragCoord.xy),4.0);
@@ -173,16 +180,12 @@ const postEffectShader={
         float threshold=fract(index*.61803398875);
         float value=step(threshold,mix(luma(base.rgb),dot(base.rgb,vec3(.333)),amount));
         result=mix(base.rgb,vec3(value),amount);
-      }else if(mode>7.5&&mode<8.5){
-        float line=.72+.28*sin(gl_FragCoord.y*3.14159);
-        float roll=.94+.06*sin(vUv.y*18.0+vUv.x*3.0);
-        result=base.rgb*mix(1.0,line*roll,amount);
-      }else if(mode>8.5){
+      }else if(mode>7.5){
         vec2 t=1.0/max(resolution,vec2(1.0))*mix(2.0,8.0,amount);
         vec3 glow=texture2D(tDiffuse,vUv+vec2(t.x,0.0)).rgb+texture2D(tDiffuse,vUv-vec2(t.x,0.0)).rgb+texture2D(tDiffuse,vUv+vec2(0.0,t.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.0,t.y)).rgb;
         result=base.rgb+glow*.12*amount;
       }
-      vec4 outputColor=vec4(result,base.a);
+      vec4 outputColor=vec4(result,outputAlpha);
       if(compositeBackground>.5){
         vec4 background=texture2D(tBackground,vUv);
         outputColor=vec4(outputColor.rgb*outputColor.a+background.rgb*(1.0-outputColor.a),outputColor.a+background.a*(1.0-outputColor.a));
@@ -194,8 +197,10 @@ const postEffectShader={
 function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true){
   runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
   runtime.effectPass.uniforms.intensity.value=props.effectIntensity/100;
+  runtime.effectPass.uniforms.duotoneColor.value.set(props.duotoneColor);
   runtime.effectPass.uniforms.resolution.value.set(runtime.renderer.domElement.width,runtime.renderer.domElement.height);
   const isolateModel=!includeBackground||!props.effectBackground;
+  runtime.effectPass.uniforms.expandCellAlpha.value=isolateModel?1:0;
   if(isolateModel){
     const background=runtime.scene.background;
     const modelVisible=runtime.model.visible;
