@@ -9,7 +9,7 @@ type GeometryMode = "Extrude" | "Revolve" | "Inflate";
 type PostEffect = "None" | "Cartoon" | "Sketch" | "Halftone" | "Pixelate" | "Chromatic" | "Duotone" | "Dither" | "Glow";
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
 type Language = "en" | "ru";
-type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;fontWeight:number;letterSpacing:number;lineSpacing:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string;effect:PostEffect;effectIntensity:number;effectBackground:boolean;duotoneColor:string };
+type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;inflateAmount:number;bend:number;bulge:number;taper:number;twist:number;fontWeight:number;letterSpacing:number;lineSpacing:number;material:Material;color:string;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string;effect:PostEffect;effectIntensity:number;effectBackground:boolean;duotoneDarkColor:string;duotoneColor:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string; fontBlob?:Blob };
 type FontOption = { id:string; name:string; family:string; url:string; blob?:Blob; custom?:boolean };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
@@ -18,17 +18,17 @@ type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredCustomMaterial = Omit<CustomMaterial,"source">;
 type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
 
-const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,fontWeight:400,letterSpacing:0,lineSpacing:118,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,glassIor:1.5,glassTransparency:88,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@",effect:"None",effectIntensity:70,effectBackground:false,duotoneColor:"#FF7A45"};
+const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,fontWeight:400,letterSpacing:0,lineSpacing:118,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,glassIor:1.5,glassTransparency:88,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@",effect:"None",effectIntensity:70,effectBackground:false,duotoneDarkColor:"#090C13",duotoneColor:"#FF7A45"};
 
 const ru:Record<string,string>={
-  "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
+  "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Figma: Copy as SVG or PNG, then paste":"Figma: Copy as SVG или PNG, затем вставьте","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
   "Text becomes real editable 3D outlines, including counters inside letters.":"Текст преобразуется в редактируемые 3D-контуры, включая полости внутри букв.","Transparent shapes with clean edges give the best extrusion.":"Прозрачные фигуры с чистыми краями дают лучший результат экструзии.",
   "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Center object":"Вернуть в центр","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","LMB rotate · RMB pan · Scroll zoom":"ЛКМ — вращение · ПКМ — перемещение · Колесо — масштаб",
   "Properties":"Параметры","Reset all":"Сбросить всё","Copy Properties":"Копировать параметры","Paste Properties":"Вставить параметры","Geometry":"Геометрия","Extrude":"Экструзия","Revolve":"Вращение","Inflate":"Надувание","Thickness":"Толщина","Segments":"Сегменты","Surface detail":"Детализация поверхности","Edge":"Фаска","Mass":"Масса","Inflation":"Надувание",
   "Deform":"Деформация","Bend":"Изгиб","Bulge":"Выпуклость","Taper":"Сужение","Twist":"Скручивание","Material":"Материал","Surface":"Поверхность","High shine":"Глянец","Brushed":"Шлифованный","Clear":"Прозрачный","CC0 texture":"Текстура CC0","Soft matte":"Мягкий матовый","Mirror":"Зеркальный","Real-time text":"Текст в реальном времени",
   "Drop JPG material":"Перетащите JPG-материал","Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB":"Рекомендуется: бесшовный квадрат 1024×1024, sRGB, ≤ 8 МБ","Custom diffuse / albedo":"Пользовательский diffuse / albedo","Texture by Poly Haven":"Текстура Poly Haven","Texture by ambientCG":"Текстура ambientCG","Repeat":"Повтор","Rotation":"Вращение","Color overlay":"Наложение цвета","Normal strength":"Сила рельефа","Physical refraction":"Физическая рефракция","Refraction (IOR)":"Рефракция (IOR)","Transparency":"Прозрачность",
   "Characters":"Символы","Character Set":"Набор символов","Letters":"Буквы","Numbers":"Цифры","Letters + Numbers":"Буквы + цифры","Arrows & Chevrons":"Стрелки и шевроны","Math & Symbols":"Математика и символы","Custom Set":"Свой набор","Default ramp":"Стандартная шкала","Real-time character render":"Рендер символов в реальном времени",
-  "Typography":"Типографика","Font weight":"Начертание","Letter spacing":"Межбуквенное расстояние","Line spacing":"Межстрочное расстояние","Appearance":"Внешний вид","Color":"Цвет","Roughness":"Шероховатость","Color opacity":"Прозрачность цвета","Effects":"Эффекты","Cartoon":"Мультфильм","Sketch":"Скетч","Halftone":"Растр","Pixelate":"Пикселизация","Chromatic":"Хроматический","Duotone":"Дуотон","Dither":"Дизеринг","Glow":"Свечение","Intensity":"Интенсивность","Second tone":"Второй тон","Affect background":"Обрабатывать фон","Post-processing is unavailable for ASCII":"Пост-обработка недоступна для ASCII","Lighting":"Освещение","Strength":"Яркость","Ambient":"Окружение","Shadow softness":"Мягкость тени","Shadow opacity":"Прозрачность тени","Depth":"Глубина","Soft shadow":"Мягкая тень","Background":"Фон","Scene":"Сцена","None":"Нет","Custom":"Пользовательский","Upload":"Загрузить","Noir":"Нуар","Sky":"Небо","Sunset":"Закат","Gallery":"Галерея","Acid":"Кислотный",
+  "Typography":"Типографика","Font weight":"Начертание","Letter spacing":"Межбуквенное расстояние","Line spacing":"Межстрочное расстояние","Appearance":"Внешний вид","Color":"Цвет","Roughness":"Шероховатость","Color opacity":"Прозрачность цвета","Effects":"Эффекты","Cartoon":"Мультфильм","Sketch":"Скетч","Halftone":"Растр","Pixelate":"Пикселизация","Chromatic":"Хроматический","Duotone":"Дуотон","Dither":"Дизеринг","Glow":"Свечение","Intensity":"Интенсивность","First tone":"Первый тон","Second tone":"Второй тон","Affect background":"Обрабатывать фон","Post-processing is unavailable for ASCII":"Пост-обработка недоступна для ASCII","Lighting":"Освещение","Strength":"Яркость","Ambient":"Окружение","Shadow softness":"Мягкость тени","Shadow opacity":"Прозрачность тени","Depth":"Глубина","Soft shadow":"Мягкая тень","Background":"Фон","Scene":"Сцена","None":"Нет","Custom":"Пользовательский","Upload":"Загрузить","Noir":"Нуар","Sky":"Небо","Sunset":"Закат","Gallery":"Галерея","Acid":"Кислотный",
   "Gloss":"Глянец","Metal":"Металл","Glass":"Стекло","Wood":"Дерево","Stone":"Камень","Marble":"Мрамор","Leather":"Кожа","Concrete":"Бетон","Rubber":"Резина","Clay":"Глина","Chrome":"Хром",
   "Ready to export":"Готово к экспорту","Transparent background":"Прозрачный фон","Background included":"Фон включён","High quality":"Высокое качество","Transparent":"Прозрачный","Studio black":"Чёрный фон","Scene background":"Фон сцены","Interactive":"Интерактивный","ASCII graphic":"ASCII-графика","3D geometry":"3D-геометрия",
   "Standard":"Стандарт","Diffuse":"Рассеянный","Top Left":"Сверху слева","Right":"Справа","Drag to position light":"Перетащите источник света","Playtools are available on desktop only.":"Playtools доступен только на десктопе.","INTERACTIVE EMBED":"ИНТЕРАКТИВНЫЙ EMBED","Put this shape anywhere.":"Разместите эту фигуру где угодно.","Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.":"Скопируйте код и вставьте его на сайт. Модель сохранит вращение, материал и цвет.","Copy embed code":"Скопировать embed-код",
@@ -144,6 +144,22 @@ function fileFromPasteData(data:DataTransfer){
   return png?new File([png],/\.png$/i.test(png.name)?png.name:`figma-${Date.now()}.png`,{type:"image/png"}):null;
 }
 
+async function fileFromClipboardItems(items:ClipboardItem[]){
+  for(const type of ["image/svg+xml","text/plain","text/html","image/png"]){
+    for(const item of items){
+      if(!item.types.includes(type))continue;
+      try{
+        const blob=await item.getType(type);
+        if(type.startsWith("text/")){
+          const svg=svgFileFromText(await blob.text());
+          if(svg)return svg;
+        }else return new File([blob],`figma-${Date.now()}.${type.endsWith("png")?"png":"svg"}`,{type});
+      }catch{/* Try the next clipboard representation. */}
+    }
+  }
+  return null;
+}
+
 function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ label:string; value:number; min:number; max:number; step?:number; suffix?:string; onChange:(value:number)=>void }) {
   const update = (raw:number) => onChange(Math.max(min,Math.min(max,Number.isFinite(raw)?raw:min)));
   const progress=(value-min)/(max-min)*100;
@@ -152,6 +168,10 @@ function RangeControl({ label, value, min, max, step=1, suffix="", onChange }:{ 
 
 function ColorSwatch({color,selected,onChoose,onRemove}:{color:string;selected:boolean;onChoose:()=>void;onRemove:()=>void}){
   return <span className="palette-swatch"><button aria-label={`Set color ${color}`} className={selected?"selected":""} style={{background:color}} onClick={onChoose}/><button className="palette-delete" aria-label={`Remove color ${color}`} onPointerDown={(event)=>event.stopPropagation()} onMouseDown={(event)=>event.stopPropagation()} onClick={(event)=>{event.preventDefault();event.stopPropagation();onRemove();}}>×</button></span>;
+}
+
+function TonePalette({label,color,colors,onChange,t}:{label:string;color:string;colors:string[];onChange:(color:string)=>void;t:(value:string)=>string}){
+  return <div className="effect-color"><div className="control-row"><span>{t(label)}</span><output>{color}</output></div><div className="tone-palette">{colors.map(item=><button key={item} aria-label={`Set ${label.toLowerCase()} ${item}`} className={color===item?"active":""} style={{background:item}} onClick={()=>onChange(item)}/>)}<label className="custom-color">+<input aria-label={`Custom ${label.toLowerCase()}`} type="color" value={color} onInput={event=>onChange(event.currentTarget.value.toUpperCase())}/></label></div></div>;
 }
 
 function BackgroundSwatch({item,selected,onChoose,onRemove}:{item:CustomBackground;selected:boolean;onChoose:()=>void;onRemove:()=>void}){
@@ -233,6 +253,7 @@ export default function Home() {
   const [effect,setEffect]=useState<PostEffect>("None");
   const [effectIntensity,setEffectIntensity]=useState(70);
   const [effectBackground,setEffectBackground]=useState(false);
+  const [duotoneDarkColor,setDuotoneDarkColor]=useState("#090C13");
   const [duotoneColor,setDuotoneColor]=useState("#FF7A45");
   const [background, setBackground] = useState("None");
   const [customBackgrounds,setCustomBackgrounds]=useState<CustomBackground[]>([]);
@@ -256,6 +277,8 @@ export default function Home() {
   const cacheWriteRef = useRef<Promise<void>>(Promise.resolve());
   const cacheErrorRef = useRef(false);
   const backgroundCounterRef=useRef(1);
+  const nativePasteAtRef=useRef(0);
+  const pasteFingerprintRef=useRef({value:"",at:0});
 
   const shapesRef = useRef(shapeItems);
   shapesRef.current=shapeItems;
@@ -270,7 +293,7 @@ export default function Home() {
   const fileName=activeShape?.name??"shape.svg";
   const t=useCallback((value:string)=>language==="ru"?(ru[value]??value):value,[language]);
   const flash=useCallback((message:string)=>{setToast(t(message));window.setTimeout(()=>setToast(""),2200);},[t]);
-  const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,fontWeight,letterSpacing,lineSpacing,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet,effect,effectIntensity,effectBackground,duotoneColor};
+  const currentParams:ShapeParams={geometryMode,thickness,segments,surfaceDetail,edge,mass,inflateAmount,bend,bulge,taper,twist,fontWeight,letterSpacing,lineSpacing,material,color,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet,effect,effectIntensity,effectBackground,duotoneDarkColor,duotoneColor};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
   const activeCustomBackground=customBackgrounds.find(item=>item.source===background);
@@ -356,16 +379,32 @@ export default function Home() {
   },[flash]);
 
   useEffect(()=>{
-    const handlePaste=(event:ClipboardEvent)=>{
-      const target=event.target as HTMLElement|null;
-      if(target?.closest("input,textarea,select,[contenteditable='true']")||!event.clipboardData)return;
-      const file=fileFromPasteData(event.clipboardData);
-      if(!file)return;
-      event.preventDefault();
+    const importPastedFile=(file:File)=>{
+      const now=Date.now(),fingerprint=`${file.type}:${file.size}`;
+      if(pasteFingerprintRef.current.value===fingerprint&&now-pasteFingerprintRef.current.at<900)return;
+      pasteFingerprintRef.current={value:fingerprint,at:now};
       importFile(file,"Shape pasted from Figma");
     };
-    window.addEventListener("paste",handlePaste);
-    return()=>window.removeEventListener("paste",handlePaste);
+    const handlePaste=(event:ClipboardEvent)=>{
+      if(!event.clipboardData)return;
+      const file=fileFromPasteData(event.clipboardData);
+      if(!file)return;
+      nativePasteAtRef.current=Date.now();
+      event.preventDefault();
+      importPastedFile(file);
+    };
+    const handleKeyDown=(event:KeyboardEvent)=>{
+      if(event.key.toLowerCase()!=="v"||(!event.metaKey&&!event.ctrlKey)||!navigator.clipboard?.read)return;
+      const started=Date.now();
+      const fallback=navigator.clipboard.read().then(fileFromClipboardItems).catch(()=>null);
+      window.setTimeout(()=>{
+        if(nativePasteAtRef.current>=started)return;
+        fallback.then(file=>{if(file)importPastedFile(file);});
+      },80);
+    };
+    document.addEventListener("paste",handlePaste,true);
+    document.addEventListener("keydown",handleKeyDown,true);
+    return()=>{document.removeEventListener("paste",handlePaste,true);document.removeEventListener("keydown",handleKeyDown,true);};
   },[importFile]);
 
   const importFont=async(file?:File)=>{
@@ -441,7 +480,7 @@ export default function Home() {
   const moveAxisDrag=(event:React.PointerEvent<HTMLDivElement>)=>{const drag=axisDragRef.current;if(drag)updateAxis(drag.axis,Math.round((drag.startValue+(event.clientX-drag.startX)*.65)*10)/10);};
   const endAxisDrag=()=>{axisDragRef.current=null;};
 
-  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setInflateAmount(params.inflateAmount??55);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setFontWeight(params.fontWeight??400);setLetterSpacing(params.letterSpacing??0);setLineSpacing(params.lineSpacing??118);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setNormalStrength(params.normalStrength??135);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??128);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");setEffect(params.effect??"None");setEffectIntensity(params.effectIntensity??70);setEffectBackground(params.effectBackground??false);setDuotoneColor(params.duotoneColor??"#FF7A45");}
+  function applyParams(params:ShapeParams,suppress=true){if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setInflateAmount(params.inflateAmount??55);setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setFontWeight(params.fontWeight??400);setLetterSpacing(params.letterSpacing??0);setLineSpacing(params.lineSpacing??118);setMaterial(params.material);setColor(params.color);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setNormalStrength(params.normalStrength??135);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??128);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");setEffect(params.effect??"None");setEffectIntensity(params.effectIntensity??70);setEffectBackground(params.effectBackground??false);setDuotoneDarkColor(params.duotoneDarkColor??"#090C13");setDuotoneColor(params.duotoneColor??"#FF7A45");}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
   const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind==="text"?"text":"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
   const deleteShape=(id:string)=>{
@@ -469,7 +508,7 @@ export default function Home() {
   const resetMaterial = () => { setMaterial("Gloss"); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setNormalStrength(135); setGlassIor(1.5); setGlassTransparency(88); setAsciiCharacters(128); setAsciiCharacterSet("Letters + Numbers"); setAsciiCustomSet(" .:-=+*#%@"); };
   const resetAppearance = () => { setColor("#E0E0E0"); setHexDraft("#E0E0E0"); setColorOpacity(100); setRoughness(18); };
   const resetTypography=()=>{setFontWeight(400);setLetterSpacing(0);setLineSpacing(118);};
-  const resetEffects = () => { setEffect("None");setEffectIntensity(70);setEffectBackground(false);setDuotoneColor("#FF7A45"); };
+  const resetEffects = () => { setEffect("None");setEffectIntensity(70);setEffectBackground(false);setDuotoneDarkColor("#090C13");setDuotoneColor("#FF7A45"); };
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
   const resetAll = () => { resetGeometry(); resetDeform();resetTypography(); resetMaterial(); resetAppearance();resetEffects(); resetLighting(); resetBackground(); resetView(); flash("All parameters reset"); };
@@ -485,7 +524,7 @@ export default function Home() {
           <div className="panel-heading"><span>01</span><h2>{t("Source")}</h2></div>
           <div className="source-tabs"><button className={sourceMode==="image"?"active":""} onClick={()=>setSourceMode("image")}>{t("Image")}</button><button className={sourceMode==="text"?"active":""} onClick={()=>setSourceMode("text")}>{t("Text")}</button></div>
           {sourceMode==="image"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
-            <span className="upload-icon">↗</span><strong>{t("Drop your shape")}</strong><small>SVG or PNG · max 12 MB</small>
+            <span className="upload-icon">↗</span><strong>{t("Drop your shape")}</strong><small>SVG or PNG · max 12 MB</small><small className="figma-hint">{t("Figma: Copy as SVG or PNG, then paste")}</small>
           </button>:<div className="text-source"><label><span>{t("Text")}</span><textarea aria-label={t("Text")} maxLength={120} rows={3} value={textDraft} style={{fontFamily:activeFont.family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>{t("Font")}</span><select aria-label={t("Font")} value={fontDraft} onChange={event=>setFontDraft(event.target.value)}><optgroup label={t("Google Fonts")}>{googleFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>{customFonts.length>0&&<optgroup label={t("Custom Fonts")}>{customFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>}</select></label><button className="font-upload" onClick={()=>fontRef.current?.click()}><span>＋ {t("Upload font")}</span><small>{t("TTF / OTF · max 12 MB")}</small></button><button className="create-text" onClick={createTextShape}>{t("Create text shape")} <span>↗</span></button><small>{activeFont.custom?"Local font":"Open Font License"} · ⌘ Enter</small></div>}
           <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
           <input ref={fontRef} className="file-input" type="file" accept=".ttf,.otf,font/ttf,font/otf,application/x-font-ttf,application/x-font-opentype" onChange={event=>{void importFont(event.target.files?.[0]);event.currentTarget.value="";}} />
@@ -501,7 +540,7 @@ export default function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalStrength} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={material==="ASCII"?"None":effect} effectIntensity={effectIntensity} effectBackground={effectBackground} duotoneColor={duotoneColor} background={background} demoSpin={Boolean(activeShape?.demo)} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} inflateAmount={inflateAmount} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalStrength} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={material==="ASCII"?"None":effect} effectIntensity={effectIntensity} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} demoSpin={Boolean(activeShape?.demo)} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>{t("Building geometry")}</b><small>{t("Interface stays responsive")}</small></div>}
             <div className="drag-hint"><span>↔</span> {t("LMB rotate · RMB pan · Scroll zoom")}</div>
           </div>
@@ -540,7 +579,7 @@ export default function Home() {
             <summary><span>{t("Effects")}</span><button onClick={(e)=>{e.preventDefault();resetEffects();}} aria-label="Reset effects">↺</button></summary>
             <div className="section-body effects-body">
               <div className={`effects-grid ${material==="ASCII"?"disabled":""}`} role="group" aria-label="Post-processing effect">{postEffects.map(item=><button key={item.name} className={effect===item.name?"active":""} disabled={material==="ASCII"} onClick={()=>setEffect(item.name)}><i>{item.symbol}</i><span>{t(item.name)}</span></button>)}</div>
-              {material==="ASCII"?<small className="effects-note">{t("Post-processing is unavailable for ASCII")}</small>:effect!=="None"&&<><RangeControl label={t("Intensity")} value={effectIntensity} min={0} max={100} suffix="%" onChange={setEffectIntensity}/>{effect==="Duotone"&&<div className="effect-color"><div className="control-row"><span>{t("Second tone")}</span><output>{duotoneColor}</output></div><div className="tone-palette">{paletteColors.map(item=><button key={item} aria-label={`Set second tone ${item}`} className={duotoneColor===item?"active":""} style={{background:item}} onClick={()=>setDuotoneColor(item)}/>)}<label className="custom-color">+<input aria-label="Custom second tone" type="color" value={duotoneColor} onInput={event=>setDuotoneColor(event.currentTarget.value.toUpperCase())}/></label></div></div>}<label className="switch-row"><span>{t("Affect background")}</span><input type="checkbox" checked={effectBackground} onChange={event=>setEffectBackground(event.target.checked)}/><i/></label></>}
+              {material==="ASCII"?<small className="effects-note">{t("Post-processing is unavailable for ASCII")}</small>:effect!=="None"&&<><RangeControl label={t("Intensity")} value={effectIntensity} min={0} max={100} suffix="%" onChange={setEffectIntensity}/>{effect==="Duotone"&&<div className="duotone-palettes"><TonePalette label="First tone" color={duotoneDarkColor} colors={paletteColors} onChange={setDuotoneDarkColor} t={t}/><TonePalette label="Second tone" color={duotoneColor} colors={paletteColors} onChange={setDuotoneColor} t={t}/></div>}<label className="switch-row"><span>{t("Affect background")}</span><input type="checkbox" checked={effectBackground} onChange={event=>setEffectBackground(event.target.checked)}/><i/></label></>}
             </div>
           </details>
 

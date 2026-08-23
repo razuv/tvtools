@@ -67,6 +67,7 @@ type StageProps = {
   effect: string;
   effectIntensity: number;
   effectBackground: boolean;
+  duotoneDarkColor: string;
   duotoneColor: string;
   background: string;
   onReady?: (triangles: number) => void;
@@ -107,6 +108,7 @@ const postEffectShader={
     intensity:{value:1},
     compositeBackground:{value:0},
     expandCellAlpha:{value:0},
+    duotoneDarkColor:{value:new THREE.Color("#090c13")},
     duotoneColor:{value:new THREE.Color("#ff7a45")},
   },
   vertexShader:`varying vec2 vUv;
@@ -118,6 +120,7 @@ const postEffectShader={
     uniform float intensity;
     uniform float compositeBackground;
     uniform float expandCellAlpha;
+    uniform vec3 duotoneDarkColor;
     uniform vec3 duotoneColor;
     varying vec2 vUv;
     float luma(vec3 color){return dot(color,vec3(.2126,.7152,.0722));}
@@ -172,7 +175,7 @@ const postEffectShader={
         result=mix(base.rgb,split,amount);
       }else if(mode>5.5&&mode<6.5){
         float lightness=luma(base.rgb);
-        vec3 duo=mix(vec3(.035,.045,.075),duotoneColor,smoothstep(.08,.92,lightness));
+        vec3 duo=mix(duotoneDarkColor,duotoneColor,smoothstep(.08,.92,lightness));
         result=mix(base.rgb,duo,amount);
       }else if(mode>6.5&&mode<7.5){
         vec2 p=mod(floor(gl_FragCoord.xy),4.0);
@@ -197,6 +200,7 @@ const postEffectShader={
 function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true){
   runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
   runtime.effectPass.uniforms.intensity.value=props.effectIntensity/100;
+  runtime.effectPass.uniforms.duotoneDarkColor.value.set(props.duotoneDarkColor);
   runtime.effectPass.uniforms.duotoneColor.value.set(props.duotoneColor);
   runtime.effectPass.uniforms.resolution.value.set(runtime.renderer.domElement.width,runtime.renderer.domElement.height);
   const isolateModel=!includeBackground||!props.effectBackground;
@@ -699,7 +703,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const host = hostRef.current!;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 100);
-    camera.position.set(0, 0, 5.4);
+    camera.position.set(0,0,latestPropsRef.current.demoSpin?6.15:5.4);
     const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
