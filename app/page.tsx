@@ -17,8 +17,45 @@ type CustomBackground = { id:string; name:string; blob:Blob; source:string };
 type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredCustomMaterial = Omit<CustomMaterial,"source">;
 type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
+type EmbedPayload = {
+  version:1;
+  shape:{fileName:string;source:string|null;text?:string;fontUrl?:string};
+  params:ShapeParams;
+  scene:{light:number;lightX:number;lightY:number;lightZ:number;ambientLight:number;shadowSoftness:number;shadowOpacity:number;shadows:boolean;background:string;rotation:{x:number;y:number;z:number}};
+  customMaterialUrl?:string;
+};
 
 const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,inflateAmount:55,bend:0,bulge:0,taper:0,twist:0,fontWeight:400,letterSpacing:0,lineSpacing:118,material:"Gloss",color:"#E0E0E0",colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,glassIor:1.5,glassTransparency:88,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@",effect:"None",effectIntensity:70,effectBackground:false,duotoneDarkColor:"#090C13",duotoneColor:"#FF7A45"};
+
+function blobToDataUrl(blob:Blob){
+  return new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
+}
+
+function base64UrlEncode(bytes:Uint8Array){
+  let binary="";for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));
+  return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
+}
+
+function base64UrlDecode(value:string){
+  const base64=value.replace(/-/g,"+").replace(/_/g,"/").padEnd(Math.ceil(value.length/4)*4,"=");
+  const binary=atob(base64),bytes=new Uint8Array(binary.length);for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);return bytes;
+}
+
+async function encodeEmbedPayload(payload:EmbedPayload){
+  const source=new TextEncoder().encode(JSON.stringify(payload));
+  if(typeof CompressionStream!=="undefined"){
+    const compressed=await new Response(new Blob([source]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+    return `g.${base64UrlEncode(new Uint8Array(compressed))}`;
+  }
+  return `j.${base64UrlEncode(source)}`;
+}
+
+async function decodeEmbedPayload(value:string){
+  const [format,encoded]=value.split(".",2);if(!encoded)throw new Error("Missing embed data");
+  const bytes=base64UrlDecode(encoded);
+  const json=format==="g"&&typeof DecompressionStream!=="undefined"?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text():new TextDecoder().decode(bytes);
+  const payload=JSON.parse(json) as EmbedPayload;if(payload.version!==1)throw new Error("Unsupported embed data");return payload;
+}
 
 const ru:Record<string,string>={
   "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Figma: Copy as SVG or PNG, then paste":"Figma: Copy as SVG или PNG, затем вставьте","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
@@ -203,7 +240,25 @@ function LightDirectionControl({x,y,z,onChange,t}:{x:number;y:number;z:number;on
   </div>;
 }
 
-export default function Home() {
+function EmbedViewer(){
+  const [payload,setPayload]=useState<EmbedPayload|null>(null);
+  const [error,setError]=useState("");
+  const stageRef=useRef<StageHandle>(null);
+  const rotationApplied=useRef(false);
+  useEffect(()=>{let cancelled=false;decodeEmbedPayload(window.location.hash.slice(1)).then(value=>{if(!cancelled)setPayload(value);}).catch(()=>{if(!cancelled)setError("This embed link is invalid or incomplete.");});return()=>{cancelled=true;};},[]);
+  const applyRotation=useCallback(()=>{if(!payload||rotationApplied.current)return;rotationApplied.current=true;(["x","y","z"] as const).forEach(axis=>stageRef.current?.setRotation(axis,payload.scene.rotation[axis]));},[payload]);
+  if(error)return <main className="embed-shell embed-message"><img src={publicAsset("favicon.svg")} alt=""/><strong>Playtools</strong><p>{error}</p></main>;
+  if(!payload)return <main className="embed-shell embed-message"><span className="embed-spinner"/><strong>Loading Playtools embed</strong></main>;
+  const p=payload.params,s=payload.scene;
+  const glyphs=p.asciiCharacterSet==="Custom Set"?p.asciiCustomSet:(asciiCharacterSets[p.asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
+  return <main className="embed-shell">
+    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} customMaterialUrl={payload.customMaterialUrl} color={p.color} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} inflateAmount={p.inflateAmount} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.material==="ASCII"?"None":p.effect} effectIntensity={p.effectIntensity} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} onReady={applyRotation}/>
+    <a className="embed-brand" href={new URL(import.meta.env.BASE_URL,window.location.origin).href} target="_blank" rel="noreferrer"><img src={publicAsset("favicon.svg")} alt=""/><span>Playtools</span></a>
+    <div className="embed-hint">LMB rotate · RMB pan · Scroll zoom</div>
+  </main>;
+}
+
+function Home() {
   const [language,setLanguage]=useState<Language>("en");
   const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape]);
   const [customMaterials,setCustomMaterials]=useState<CustomMaterial[]>([]);
@@ -260,6 +315,8 @@ export default function Home() {
   const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
   const [triangles, setTriangles] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false);
+  const [embedCode,setEmbedCode]=useState("");
+  const [embedBusy,setEmbedBusy]=useState(false);
   const [toast, setToast] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [interfaceHidden, setInterfaceHidden] = useState(false);
@@ -515,7 +572,22 @@ export default function Home() {
   const chooseColor = (next:string, add=true) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add)setPaletteColors(items=>items.includes(normalized)?items:[...items,normalized]); };
   const commitHex = () => { const value=hexDraft.trim(); if(/^#[0-9A-F]{6}$/i.test(value))chooseColor(value,true); else setHexDraft(color.toUpperCase()); };
 
-  const embedCode = `<iframe src="https://shape3d.site/embed/${fileName.replace(/\W/g, "-")}" width="640" height="640" style="border:0" allow="fullscreen"></iframe>`;
+  const prepareEmbed=async()=>{
+    if(!activeShape||embedBusy)return;
+    setEmbedBusy(true);
+    try{
+      const shapeSource=activeShape.kind==="text"?null:activeShape.blob?await blobToDataUrl(activeShape.blob):activeShape.source;
+      const fontUrl=activeShape.kind==="text"?(activeShape.fontBlob?await blobToDataUrl(activeShape.fontBlob):activeShape.fontUrl):undefined;
+      const customMaterialUrl=activeCustomMaterial?await blobToDataUrl(activeCustomMaterial.blob):undefined;
+      const embedBackground=activeCustomBackground?await blobToDataUrl(activeCustomBackground.blob):background;
+      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,background:embedBackground,rotation:{...rotation}},customMaterialUrl};
+      const encoded=await encodeEmbedPayload(payload);
+      const url=new URL(import.meta.env.BASE_URL,window.location.origin);url.searchParams.set("embed","1");url.hash=encoded;
+      setEmbedCode(`<iframe src="${url.href}" width="640" height="640" title="Playtools 3D model" style="border:0" loading="lazy" allow="fullscreen"></iframe>`);
+      setEmbedOpen(true);
+    }catch{flash("Could not create embed");}
+    finally{setEmbedBusy(false);}
+  };
 
   return (
     <main className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
@@ -659,7 +731,7 @@ export default function Home() {
         <div className={`export-actions ${material==="ASCII"?"ascii-export":""}`}>
           <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span>↓</span><div><b>PNG</b><small>{t("Transparent")}</small></div></button>
           <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span>▣</span><div><b>PNG + BG</b><small>{t(background==="None"?"Studio black":"Scene background")}</small></div></button>
-          <button onClick={() => setEmbedOpen(true)}><span>&lt;/&gt;</span><div><b>Embed</b><small>{t("Interactive")}</small></div></button>
+          <button disabled={embedBusy} onClick={()=>void prepareEmbed()}><span>&lt;/&gt;</span><div><b>{embedBusy?"Preparing…":"Embed"}</b><small>{t("Interactive")}</small></div></button>
           {material==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span>≡</span><div><b>TXT</b><small>{t("ASCII graphic")}</small></div></button>}
           <button className="primary" onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span>↗</span><div><b>OBJ</b><small>{t("3D geometry")}</small></div></button>
         </div>
@@ -674,8 +746,13 @@ export default function Home() {
 
       {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>{t("Show UI")}</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}>↓ PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}>▣ PNG + BG</button>{material==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}>≡ TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}>↗ OBJ</button></div>}
 
-      {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEmbedOpen(false)}>×</button><span className="eyebrow">{t("INTERACTIVE EMBED")}</span><h3>{t("Put this shape anywhere.")}</h3><p>{t("Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.")}</p><pre>{embedCode}</pre><button className="copy-button" onClick={() => { navigator.clipboard.writeText(embedCode); flash("Embed code copied"); }}>{t("Copy embed code")}</button></div></div>}
+      {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) =>e.stopPropagation()}><button className="modal-close" onClick={() => setEmbedOpen(false)}>×</button><span className="eyebrow">{t("INTERACTIVE EMBED")}</span><h3>{t("Put this shape anywhere.")}</h3><p>{t("Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.")}</p><pre data-embed-code={embedCode}>{embedCode.length>900?`${embedCode.slice(0,900)}…`:embedCode}</pre><button className="copy-button" onClick={() => { void navigator.clipboard.writeText(embedCode).then(()=>flash("Embed code copied")); }}>{t("Copy embed code")}</button></div></div>}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
     </main>
   );
+}
+
+export default function App(){
+  const embedMode=typeof window!=="undefined"&&new URLSearchParams(window.location.search).get("embed")==="1";
+  return embedMode?<EmbedViewer/>:<Home/>;
 }

@@ -621,7 +621,7 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
 
 function presetBackground(name: string) {
   if (name === "None") return null;
-  if (name.startsWith("blob:")) { const texture = new THREE.TextureLoader().load(name); texture.colorSpace = THREE.SRGBColorSpace; return texture; }
+  if (name.startsWith("blob:")||name.startsWith("data:image/")) { const texture = new THREE.TextureLoader().load(name); texture.colorSpace = THREE.SRGBColorSpace; return texture; }
   const canvas = document.createElement("canvas"); canvas.width=1024; canvas.height=1024; const ctx=canvas.getContext("2d")!;
   const gradients:Record<string,string[]> = { Noir:["#070707","#272727"], Sky:["#9ed8ff","#eaf7ff"], Sunset:["#ff805c","#5c3b99"], Gallery:["#e9e5db","#9b968c"], Acid:["#b7f34a","#12360c"] };
   const colors=gradients[name]??gradients.Noir; const gradient=ctx.createLinearGradient(0,0,1024,1024); gradient.addColorStop(0,colors[0]); gradient.addColorStop(1,colors[1]); ctx.fillStyle=gradient; ctx.fillRect(0,0,1024,1024);
