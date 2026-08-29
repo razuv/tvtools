@@ -72,6 +72,18 @@ function revolveGeometry(contours:ShapeData[],requestedSegments:number,requested
 
 function distanceFieldToContours(x:number,y:number,contours:ShapeData[]){let distance=Infinity,gx=0,gy=0;for(const shape of contours)for(const ring of [shape.outer,...shape.holes])for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length],dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy,t=length<1e-12?0:THREE.MathUtils.clamp(((x-a[0])*dx+(y-a[1])*dy)/length,0,1),qx=a[0]+dx*t,qy=a[1]+dy*t,px=x-qx,py=y-qy,next=Math.hypot(px,py);if(next<distance){distance=next;if(next>1e-8){gx=px/next;gy=py/next;}}}return {distance,gx,gy};}
 
+function relaxInflateHeights(geometry:THREE.BufferGeometry,distances:Float32Array,iterations=3){
+  const index=geometry.index;if(!index)return;const position=geometry.attributes.position as THREE.BufferAttribute,count=position.count,sum=new Float64Array(count),weight=new Uint32Array(count),next=new Float32Array(count);
+  const add=(target:number,a:number,b:number)=>{sum[target]+=position.getZ(a)+position.getZ(b);weight[target]+=2;};
+  for(let pass=0;pass<iterations;pass++){
+    sum.fill(0);weight.fill(0);
+    for(let offset=0;offset<index.count;offset+=3){const a=index.getX(offset),b=index.getX(offset+1),c=index.getX(offset+2);add(a,b,c);add(b,a,c);add(c,a,b);}
+    for(let i=0;i<count;i++){const current=position.getZ(i);next[i]=distances[i]<1e-5||!weight[i]?current:THREE.MathUtils.lerp(current,sum[i]/weight[i],.42);}
+    for(let i=0;i<count;i++)position.setZ(i,next[i]);
+  }
+  position.needsUpdate=true;
+}
+
 /**
  * Subdivide the complete closed shell with one shared division level. Splitting
  * only the caps makes their boundary curve under a nonlinear deformation while
@@ -136,7 +148,7 @@ function build(data:GeometryRequest){
   geometry.computeBoundingBox();const before=geometry.boundingBox!;const size=new THREE.Vector3();before.getSize(size);const scale=3/Math.max(size.x,size.y);geometry.scale(scale,-scale,data.geometryMode==="Revolve"?scale:1);geometry.center();
   const deformationContours=normalized.contours.map(shape=>({outer:shape.outer.map(([x,y])=>[x*scale,-y*scale]),holes:shape.holes.map(ring=>ring.map(([x,y])=>[x*scale,-y*scale]))}));
   if(active){const divisions=isInflate?6+Math.round(data.surfaceDetail)*7:data.surfaceDetail;geometry=subdivideShell(geometry,divisions,isInflate?600000:160000,isInflate?42:5);}
-  geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute;const mass=isInflate?0:data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
+  geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute;const inflateDistances=isInflate?new Float32Array(position.count):undefined;const mass=isInflate?0:data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
   const inflateAmplitude=Math.max(.001,data.inflateAmount/100*.72),inflateFalloff=Math.min(.48,Math.max(.07,Math.min(normalized.size.x,normalized.size.y)*scale*.2));
   for(let i=0;i<position.count;i++){
     let x=position.getX(i),y=position.getY(i),z=position.getZ(i);const xn=THREE.MathUtils.clamp((x-cx)/hx,-1,1),yn=THREE.MathUtils.clamp((y-cy)/hy,-1,1),zn=THREE.MathUtils.clamp((z-cz)/hz,-1,1),radial=Math.max(0,1-xn*xn-yn*yn);
@@ -144,19 +156,13 @@ function build(data:GeometryRequest){
     if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;
     if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}
     if(isInflate){
-      // Keep a very narrow, zero-slope rim before the inflated profile starts.
-      // Without it, the first barycentric row of each cap triangle reaches a
-      // different height and its fan topology becomes visible as edge teeth.
-      const field=distanceFieldToContours(x,y,deformationContours),rim=Math.min(.018,inflateFalloff*.1),t=THREE.MathUtils.clamp((field.distance-rim)/Math.max(.001,inflateFalloff-rim),0,1),rounded=t*t*(3-2*t);
+      const side=zn>=0?1:-1,field=distanceFieldToContours(x,y,deformationContours),t=THREE.MathUtils.clamp(field.distance/inflateFalloff,0,1),rounded=Math.pow(Math.sin(t*Math.PI*.5),.72);inflateDistances![i]=field.distance;
       const outward=data.inflateDirection!=="Inward",height=outward?inflateAmplitude*rounded:inflateAmplitude*(1-.94*rounded);
-      // Preserve the original depth coordinate through the subdivided side
-      // wall. Snapping every side vertex to +/-height folds alternating wall
-      // triangles over one another and produces a serrated silhouette.
-      z=cz+zn*height;
+      z=cz+side*height;
     }else z=cz+(z-cz)*(1+mass*.18)+zn*hz*mass*radial*.48;
     position.setXYZ(i,x,y,z);
   }
-  position.needsUpdate=true;geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  position.needsUpdate=true;if(isInflate)relaxInflateHeights(geometry,inflateDistances!);geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
   // A low fixed crease angle made gently curved cap triangles shade as separate
   // facets. The bevel amount now controls a broader, genuinely smooth normal
   // transition while the 90-degree non-bevel edge remains crisp.
