@@ -52,7 +52,10 @@ type StageProps = {
   surfaceDetail: number;
   edge: number;
   mass: number;
+  revolveAngle: number;
+  revolveEdge: "Outer" | "Inner";
   inflateAmount: number;
+  inflateDirection: "Outward" | "Inward";
   bend: number;
   bulge: number;
   taper: number;
@@ -699,7 +702,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
   }));
 
-  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,fontWeight:shapeFontWeight,letterSpacing:shapeLetterSpacing,lineSpacing:shapeLineSpacing,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist,onLoading:onShapeLoading,onError:onShapeError}=props;
+  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,fontWeight:shapeFontWeight,letterSpacing:shapeLetterSpacing,lineSpacing:shapeLineSpacing,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,revolveAngle:shapeRevolveAngle,revolveEdge:shapeRevolveEdge,inflateAmount:shapeInflateAmount,inflateDirection:shapeInflateDirection,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist,onLoading:onShapeLoading,onError:onShapeError}=props;
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -819,10 +822,10 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       // the requested visual detail while bounding the actual ring density.
       const ringLimit=Math.min(1024,Math.max(48,48+shapeSegments));
       const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(Math.max(3,shapeSegments)),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(Math.max(3,shapeSegments)),ringLimit).map(point=>[point.x,point.y]))}));
-      runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,inflateAmount:shapeInflateAmount,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
+      runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,revolveAngle:shapeRevolveAngle,revolveEdge:shapeRevolveEdge,inflateAmount:shapeInflateAmount,inflateDirection:shapeInflateDirection,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
     };
     build(); return () => { cancelled = true; };
-  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeInflateAmount,shapeBend,shapeBulge,shapeTaper,shapeTwist,onShapeLoading,onShapeError]);
+  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeRevolveAngle,shapeRevolveEdge,shapeInflateAmount,shapeInflateDirection,shapeBend,shapeBulge,shapeTaper,shapeTwist,onShapeLoading,onShapeError]);
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;

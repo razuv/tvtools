@@ -19,8 +19,9 @@ test("builds a self-contained Playtools SPA", async () => {
 });
 
 test("ships the editor features and public assets", async () => {
-  const [page, packageJson, ogImage, favicon] = await Promise.all([
+  const [page, geometryWorker, packageJson, ogImage, favicon] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/geometry.worker.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../dist-pages/og.png", import.meta.url)),
     readFile(new URL("../dist-pages/favicon.svg", import.meta.url), "utf8"),
@@ -37,6 +38,11 @@ test("ships the editor features and public assets", async () => {
   assert.match(page, /Letter spacing/);
   assert.match(page, /TTF and OTF files only/);
   assert.match(page, /Geometry operation/);
+  assert.match(page, /revolveAngle/);
+  assert.match(page, /revolveEdge/);
+  assert.match(page, /inflateDirection/);
+  assert.match(geometryWorker, /requestedAngle/);
+  assert.match(geometryWorker, /inflateDirection/);
   assert.match(page, /Post-processing effect/);
   assert.match(page, /Halftone/);
   assert.match(page, /exportObj/);
