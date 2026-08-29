@@ -144,9 +144,15 @@ function build(data:GeometryRequest){
     if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;
     if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}
     if(isInflate){
-      const side=zn>=0?1:-1,field=distanceFieldToContours(x,y,deformationContours),t=THREE.MathUtils.clamp(field.distance/inflateFalloff,0,1),rounded=Math.pow(Math.sin(t*Math.PI*.5),.72);
+      // Keep a very narrow, zero-slope rim before the inflated profile starts.
+      // Without it, the first barycentric row of each cap triangle reaches a
+      // different height and its fan topology becomes visible as edge teeth.
+      const field=distanceFieldToContours(x,y,deformationContours),rim=Math.min(.018,inflateFalloff*.1),t=THREE.MathUtils.clamp((field.distance-rim)/Math.max(.001,inflateFalloff-rim),0,1),rounded=t*t*(3-2*t);
       const outward=data.inflateDirection!=="Inward",height=outward?inflateAmplitude*rounded:inflateAmplitude*(1-.94*rounded);
-      z=cz+side*height;
+      // Preserve the original depth coordinate through the subdivided side
+      // wall. Snapping every side vertex to +/-height folds alternating wall
+      // triangles over one another and produces a serrated silhouette.
+      z=cz+zn*height;
     }else z=cz+(z-cz)*(1+mass*.18)+zn*hz*mass*radial*.48;
     position.setXYZ(i,x,y,z);
   }
