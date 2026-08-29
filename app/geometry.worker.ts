@@ -133,7 +133,7 @@ function build(data:GeometryRequest){
   let geometry:THREE.BufferGeometry=data.geometryMode==="Revolve"
     ?revolveGeometry(normalized.contours,data.segments,data.revolveAngle,data.revolveEdge)
     :new THREE.ExtrudeGeometry(normalized.shapes,{depth:isInflate?.001:depth,steps:isInflate?1:depthSteps,bevelEnabled:!isInflate&&data.edge>0,bevelSegments,bevelSize:safeRadius,bevelThickness:safeRadius,bevelOffset:0,curveSegments:data.segments});
-  geometry.computeBoundingBox();const before=geometry.boundingBox!;const size=new THREE.Vector3();before.getSize(size);const scale=3/Math.max(size.x,size.y);geometry.scale(scale,-scale,1);geometry.center();
+  geometry.computeBoundingBox();const before=geometry.boundingBox!;const size=new THREE.Vector3();before.getSize(size);const scale=3/Math.max(size.x,size.y);geometry.scale(scale,-scale,data.geometryMode==="Revolve"?scale:1);geometry.center();
   const deformationContours=normalized.contours.map(shape=>({outer:shape.outer.map(([x,y])=>[x*scale,-y*scale]),holes:shape.holes.map(ring=>ring.map(([x,y])=>[x*scale,-y*scale]))}));
   if(active){const divisions=isInflate?6+Math.round(data.surfaceDetail)*7:data.surfaceDetail;geometry=subdivideShell(geometry,divisions,isInflate?600000:160000,isInflate?42:5);}
   geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute;const mass=isInflate?0:data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
@@ -144,8 +144,8 @@ function build(data:GeometryRequest){
     if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;
     if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}
     if(isInflate){
-      const side=zn>=0?1:-1,field=distanceFieldToContours(x,y,deformationContours),t=THREE.MathUtils.clamp(field.distance/inflateFalloff,0,1),rounded=Math.sin(t*Math.PI*.5);
-      const outward=data.inflateDirection!=="Inward",height=outward?inflateAmplitude*(.012+.988*rounded):inflateAmplitude*(1-.94*rounded);
+      const side=zn>=0?1:-1,field=distanceFieldToContours(x,y,deformationContours),t=THREE.MathUtils.clamp(field.distance/inflateFalloff,0,1),rounded=Math.pow(Math.sin(t*Math.PI*.5),.72);
+      const outward=data.inflateDirection!=="Inward",height=outward?inflateAmplitude*rounded:inflateAmplitude*(1-.94*rounded);
       z=cz+side*height;
     }else z=cz+(z-cz)*(1+mass*.18)+zn*hz*mass*radial*.48;
     position.setXYZ(i,x,y,z);
@@ -159,8 +159,9 @@ function build(data:GeometryRequest){
   // can put unrelated vertices in the same cell, producing the radial bands
   // seen on complex shapes. Temporarily scaling the geometry makes that grid
   // precise to 0.00001 model units without changing the resulting normals.
-  if(isInflate)geometry=geometry.index?geometry.toNonIndexed():geometry;
-  else{geometry.scale(1000,1000,1000);geometry=toCreasedNormals(geometry,THREE.MathUtils.degToRad(creaseDegrees));geometry.scale(.001,.001,.001);}
+  geometry.scale(1000,1000,1000);
+  geometry=toCreasedNormals(geometry,THREE.MathUtils.degToRad(isInflate?179:creaseDegrees));
+  geometry.scale(.001,.001,.001);
   const p=(geometry.attributes.position.array as Float32Array),n=(geometry.attributes.normal.array as Float32Array),uv=geometry.attributes.uv?(geometry.attributes.uv.array as Float32Array):new Float32Array();return {id:data.id,position:p,normal:n,uv,triangles:p.length/9};
 }
 
