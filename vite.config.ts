@@ -6,6 +6,9 @@ const base = process.env.PLAYTOOLS_PAGES_BASE ?? "/";
 export default defineConfig({
   root: "github-pages",
   base,
+  define: {
+    global: "globalThis",
+  },
   plugins: [react()],
   publicDir: "../public",
   build: {
