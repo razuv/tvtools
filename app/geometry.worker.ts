@@ -85,7 +85,7 @@ function resampleRing(ring:number[][],spacing:number){
 }
 
 function inflateGeometry(contours:ShapeData[],surfaceDetail:number){
-  const positions:number[]=[],uvs:number[]=[],detail=THREE.MathUtils.clamp(surfaceDetail,1,5),desiredSpacing=THREE.MathUtils.lerp(.11,.008,(detail-1)/4),totalArea=contours.reduce((sum,shape)=>sum+Math.abs(ringArea(shape.outer))-shape.holes.reduce((holes,ring)=>holes+Math.abs(ringArea(ring)),0),0),spacing=Math.max(desiredSpacing,Math.sqrt(Math.max(totalArea,.001)/180000));
+  const positions:number[]=[],uvs:number[]=[],detail=THREE.MathUtils.clamp(surfaceDetail,1,5),contourPoints=contours.reduce((sum,shape)=>sum+shape.outer.length+shape.holes.reduce((holes,ring)=>holes+ring.length,0),0),sparseAngular=contourPoints<=96&&!contours.some(shape=>shape.holes.length),maximumSpacing=sparseAngular ? .008 : .024,pointBudget=sparseAngular?180000:120000,desiredSpacing=THREE.MathUtils.lerp(.11,maximumSpacing,(detail-1)/4),totalArea=contours.reduce((sum,shape)=>sum+Math.abs(ringArea(shape.outer))-shape.holes.reduce((holes,ring)=>holes+Math.abs(ringArea(ring)),0),0),spacing=Math.max(desiredSpacing,Math.sqrt(Math.max(totalArea,.001)/pointBudget));
   const addTriangle=(points:poly2tri.IPointLike[],z:number,reverse:boolean)=>{
     let ordered=points;const cross=(points[1].x-points[0].x)*(points[2].y-points[0].y)-(points[1].y-points[0].y)*(points[2].x-points[0].x);if((cross<0)!==reverse)ordered=[points[0],points[2],points[1]];
     for(const point of ordered){positions.push(point.x,point.y,z);uvs.push((point.x+1.5)/3,(point.y+1.5)/3);}
