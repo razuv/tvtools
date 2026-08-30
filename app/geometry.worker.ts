@@ -73,6 +73,16 @@ function revolveGeometry(contours:ShapeData[],requestedSegments:number,requested
 
 function distanceFieldToContours(x:number,y:number,contours:ShapeData[]){let distance=Infinity,gx=0,gy=0;for(const shape of contours)for(const ring of [shape.outer,...shape.holes])for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length],dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy,t=length<1e-12?0:THREE.MathUtils.clamp(((x-a[0])*dx+(y-a[1])*dy)/length,0,1),qx=a[0]+dx*t,qy=a[1]+dy*t,px=x-qx,py=y-qy,next=Math.hypot(px,py);if(next<distance){distance=next;if(next>1e-8){gx=px/next;gy=py/next;}}}return {distance,gx,gy};}
 
+function inflateSurfaceLength(distance:number,planarScale:number,amplitude:number,falloff:number,inward:boolean){
+  const curved=Math.min(distance,falloff),steps=8,step=curved/steps,heightScale=inward?.94:1;let length=0;
+  for(let i=0;i<steps;i++){
+    const d=(i+.5)*step,t=THREE.MathUtils.clamp(d/falloff,1e-5,1),angle=t*Math.PI*.5,sine=Math.sin(angle),cosine=Math.cos(angle);
+    const slope=amplitude*heightScale*.72*Math.pow(sine,-.28)*cosine*Math.PI/(falloff*2);
+    length+=Math.hypot(planarScale,slope)*step;
+  }
+  return length+Math.max(0,distance-falloff)*planarScale;
+}
+
 function pointInRing(x:number,y:number,ring:number[][]){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
 
 function resampleRing(ring:number[][],spacing:number){
@@ -172,13 +182,16 @@ function build(data:GeometryRequest){
   geometry.computeBoundingBox();const before=geometry.boundingBox!;const size=new THREE.Vector3();before.getSize(size);const scale=3/Math.max(size.x,size.y);geometry.scale(scale,-scale,data.geometryMode==="Revolve"?scale:1);geometry.center();
   const deformationContours=normalized.contours.map(shape=>({outer:shape.outer.map(([x,y])=>[x*scale,-y*scale]),holes:shape.holes.map(ring=>ring.map(([x,y])=>[x*scale,-y*scale]))}));
   if(active&&!uniformInflate){const divisions=isInflate?6+Math.round(data.surfaceDetail)*7:data.surfaceDetail;geometry=subdivideShell(geometry,divisions,isInflate?600000:160000,isInflate?42:5);}
-  geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute;const mass=isInflate?0:data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
+  geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute,mappingUv=geometry.attributes.uv as THREE.BufferAttribute|undefined;const mass=isInflate?0:data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
   const inflateAmplitude=Math.max(.001,data.inflateAmount/100*.72),inflateFalloff=Math.min(.48,Math.max(.07,Math.min(normalized.size.x,normalized.size.y)*scale*.2));
-  for(let i=0;i<position.count;i++){
-    let x=position.getX(i),y=position.getY(i),z=position.getZ(i);const sourceX=x,sourceY=y,xn=THREE.MathUtils.clamp((x-cx)/hx,-1,1),yn=THREE.MathUtils.clamp((y-cy)/hy,-1,1),zn=THREE.MathUtils.clamp((z-cz)/hz,-1,1),radial=Math.max(0,1-xn*xn-yn*yn);
-    x=cx+(x-cx)*(1+data.bulge/100*(1-yn*yn)*.36)*(1+data.taper/100*yn*.38)*(1+mass*.08);y=cy+(y-cy)*(1+data.bulge/100*(1-xn*xn)*.18)*(1+mass*.08);
+  const deformXY=(sourceX:number,sourceY:number)=>{
+    const xn=THREE.MathUtils.clamp((sourceX-cx)/hx,-1,1),yn=THREE.MathUtils.clamp((sourceY-cy)/hy,-1,1);let x=cx+(sourceX-cx)*(1+data.bulge/100*(1-yn*yn)*.36)*(1+data.taper/100*yn*.38)*(1+mass*.08),y=cy+(sourceY-cy)*(1+data.bulge/100*(1-xn*xn)*.18)*(1+mass*.08);
     if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;
     if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}
+    return [x,y];
+  };
+  for(let i=0;i<position.count;i++){
+    const sourceX=position.getX(i),sourceY=position.getY(i),[x,y]=deformXY(sourceX,sourceY);let z=position.getZ(i);const zn=THREE.MathUtils.clamp((z-cz)/hz,-1,1),radial=Math.max(0,1-Math.pow((sourceX-cx)/hx,2)-Math.pow((sourceY-cy)/hy,2));
     if(isInflate){
       // The height field belongs to the undeformed 2D source. Evaluating it
       // after Bend/Twist compares transformed vertices with an untransformed
@@ -186,10 +199,17 @@ function build(data:GeometryRequest){
       const side=zn>=0?1:-1,field=distanceFieldToContours(sourceX,sourceY,deformationContours),t=THREE.MathUtils.clamp(field.distance/inflateFalloff,0,1),rounded=Math.pow(Math.sin(t*Math.PI*.5),.72);
       const outward=data.inflateDirection!=="Inward",height=outward?inflateAmplitude*rounded:inflateAmplitude*(1-.94*rounded);
       z=cz+side*height;
+      if(mappingUv){
+        // Reproject after deformation. The UV distance from the outline follows
+        // the inflated surface arc, so the texture keeps an even density at the
+        // closing seam instead of stretching the original flat projection.
+        const epsilon=.002,[nearX,nearY]=deformXY(sourceX+field.gx*epsilon,sourceY+field.gy*epsilon),dx=nearX-x,dy=nearY-y,planarScale=Math.max(.001,Math.hypot(dx,dy)/epsilon),surfaceDistance=inflateSurfaceLength(field.distance,planarScale,inflateAmplitude,inflateFalloff,!outward),flatDistance=field.distance*planarScale,extra=surfaceDistance-flatDistance,directionLength=Math.max(1e-8,Math.hypot(dx,dy));
+        mappingUv.setXY(i,(x+dx/directionLength*extra+1.5)/3,(y+dy/directionLength*extra+1.5)/3);
+      }
     }else z=cz+(z-cz)*(1+mass*.18)+zn*hz*mass*radial*.48;
     position.setXYZ(i,x,y,z);
   }
-  position.needsUpdate=true;geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  position.needsUpdate=true;if(isInflate&&mappingUv)mappingUv.needsUpdate=true;geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
   // A low fixed crease angle made gently curved cap triangles shade as separate
   // facets. The bevel amount now controls a broader, genuinely smooth normal
   // transition while the 90-degree non-bevel edge remains crisp.
