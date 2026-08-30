@@ -85,7 +85,7 @@ function resampleRing(ring:number[][],spacing:number){
 }
 
 function inflateGeometry(contours:ShapeData[],surfaceDetail:number){
-  const positions:number[]=[],uvs:number[]=[],detail=THREE.MathUtils.clamp(surfaceDetail,1,5),contourPoints=contours.reduce((sum,shape)=>sum+shape.outer.length+shape.holes.reduce((holes,ring)=>holes+ring.length,0),0),sparseAngular=contourPoints<=96&&!contours.some(shape=>shape.holes.length),maximumSpacing=sparseAngular ? .008 : .024,pointBudget=sparseAngular?180000:120000,desiredSpacing=THREE.MathUtils.lerp(.11,maximumSpacing,(detail-1)/4),totalArea=contours.reduce((sum,shape)=>sum+Math.abs(ringArea(shape.outer))-shape.holes.reduce((holes,ring)=>holes+Math.abs(ringArea(ring)),0),0),spacing=Math.max(desiredSpacing,Math.sqrt(Math.max(totalArea,.001)/pointBudget));
+  const positions:number[]=[],uvs:number[]=[],detail=THREE.MathUtils.clamp(surfaceDetail,1,5),contourPoints=contours.reduce((sum,shape)=>sum+shape.outer.length+shape.holes.reduce((holes,ring)=>holes+ring.length,0),0),hasHoles=contours.some(shape=>shape.holes.length),sparseAngular=contourPoints<=96&&!hasHoles,maximumSpacing=sparseAngular ? .008 : hasHoles ? .016 : .024,pointBudget=sparseAngular?180000:120000,desiredSpacing=THREE.MathUtils.lerp(.11,maximumSpacing,(detail-1)/4),totalArea=contours.reduce((sum,shape)=>sum+Math.abs(ringArea(shape.outer))-shape.holes.reduce((holes,ring)=>holes+Math.abs(ringArea(ring)),0),0),spacing=Math.max(desiredSpacing,Math.sqrt(Math.max(totalArea,.001)/pointBudget));
   const addTriangle=(points:poly2tri.IPointLike[],z:number,reverse:boolean)=>{
     let ordered=points;const cross=(points[1].x-points[0].x)*(points[2].y-points[0].y)-(points[1].y-points[0].y)*(points[2].x-points[0].x);if((cross<0)!==reverse)ordered=[points[0],points[2],points[1]];
     for(const point of ordered){positions.push(point.x,point.y,z);uvs.push((point.x+1.5)/3,(point.y+1.5)/3);}
@@ -200,14 +200,16 @@ function build(data:GeometryRequest){
     if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;
     if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}
     if(isInflate){
-      const side=zn>=0?1:-1,field=distanceFieldToContours(x,y,deformationContours),t=THREE.MathUtils.clamp(field.smoothDistance/inflateFalloff,0,1),rounded=Math.pow(Math.sin(t*Math.PI*.5),.72);
+      const side=zn>=0?1:-1,field=distanceFieldToContours(x,y,deformationContours),t=THREE.MathUtils.clamp(field.smoothDistance/inflateFalloff,0,1),rounded=Math.pow(Math.sin(t*Math.PI*.5),.55);
       inflateBoundary![i]=field.distance<1e-5?1:0;
       const outward=data.inflateDirection!=="Inward",height=outward?inflateAmplitude*rounded:inflateAmplitude*(1-.94*rounded);
       z=cz+side*height;
     }else z=cz+(z-cz)*(1+mass*.18)+zn*hz*mass*radial*.48;
     position.setXYZ(i,x,y,z);
   }
-  position.needsUpdate=true;if(isInflate&&uniformInflate)smoothInflateHeights(geometry,inflateBoundary!,8+Math.round(data.surfaceDetail)*8);geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  position.needsUpdate=true;
+  if(isInflate&&uniformInflate){smoothInflateHeights(geometry,inflateBoundary!,8+Math.round(data.surfaceDetail)*8);geometry=mergeVertices(geometry,1e-5);}
+  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
   // A low fixed crease angle made gently curved cap triangles shade as separate
   // facets. The bevel amount now controls a broader, genuinely smooth normal
   // transition while the 90-degree non-bevel edge remains crisp.
@@ -216,9 +218,8 @@ function build(data:GeometryRequest){
   // can put unrelated vertices in the same cell, producing the radial bands
   // seen on complex shapes. Temporarily scaling the geometry makes that grid
   // precise to 0.00001 model units without changing the resulting normals.
-  geometry.scale(1000,1000,1000);
-  geometry=toCreasedNormals(geometry,THREE.MathUtils.degToRad(isInflate?179:creaseDegrees));
-  geometry.scale(.001,.001,.001);
+  if(isInflate)geometry=geometry.toNonIndexed();
+  else{geometry.scale(1000,1000,1000);geometry=toCreasedNormals(geometry,THREE.MathUtils.degToRad(creaseDegrees));geometry.scale(.001,.001,.001);}
   const p=(geometry.attributes.position.array as Float32Array),n=(geometry.attributes.normal.array as Float32Array),uv=geometry.attributes.uv?(geometry.attributes.uv.array as Float32Array):new Float32Array();return {id:data.id,position:p,normal:n,uv,triangles:p.length/9};
 }
 
