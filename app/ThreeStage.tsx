@@ -12,6 +12,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js";
 import { EndType, FillRule, inflatePathsD, JoinType, simplifyPathD, unionD, type PathD } from "clipper2-ts";
+import { createVgpuPostLayer } from "./vgpuPostLayer";
 
 export type StageHandle = {
   reset: () => void;
@@ -102,6 +103,8 @@ type Runtime = {
 };
 
 const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Glow:8};
+const vgpuMaterialModes:Record<string,number>={"VGPU Glass":1,"VGPU Prism":2,"VGPU Holographic":3};
+const vgpuEffectModes:Record<string,number>={"VGPU Refraction":1,"VGPU Bloom":2,"VGPU Filmic":3};
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
@@ -595,6 +598,9 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
   const alpha=colorOpacity/100;
   let result: THREE.Material;
   if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.015,r*.28), metalness:0, transmission:glassTransparency/100, thickness:1.8, ior:glassIor, dispersion:.035, transparent:true, opacity:alpha, clearcoat:1, clearcoatRoughness:.025, envMapIntensity:1.8, attenuationColor:value, attenuationDistance:3.5 });
+  else if (kind === "VGPU Glass") result = new THREE.MeshPhysicalMaterial({color:value,roughness:Math.max(.01,r*.18),metalness:0,transmission:Math.max(.72,glassTransparency/100),thickness:2.6,ior:glassIor,dispersion:.08,transparent:true,opacity:alpha,clearcoat:1,clearcoatRoughness:.01,envMapIntensity:2.4,attenuationColor:value,attenuationDistance:4.5});
+  else if (kind === "VGPU Prism") result = new THREE.MeshPhysicalMaterial({color:value,roughness:Math.max(.04,r*.35),metalness:.08,transmission:.28,thickness:1.4,ior:Math.max(1.15,glassIor),iridescence:1,iridescenceIOR:1.8,iridescenceThicknessRange:[120,520],clearcoat:1,clearcoatRoughness:.025,envMapIntensity:2.1});
+  else if (kind === "VGPU Holographic") result = new THREE.MeshPhysicalMaterial({color:value,roughness:Math.max(.08,r*.5),metalness:.62,iridescence:1,iridescenceIOR:2.1,iridescenceThicknessRange:[80,700],clearcoat:1,clearcoatRoughness:.04,envMapIntensity:2.3});
   else if (kind === "Metal") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.12,r), metalness:.88 });
   else if (kind === "Chrome") result = new THREE.MeshPhysicalMaterial({ color:new THREE.Color("#f3f5f7"), roughness:Math.max(.025,r*.22), metalness:1, clearcoat:1, clearcoatRoughness:.02, envMapIntensity:2.8 });
   else if (kind === "ASCII") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.16,r), metalness:.08 });
@@ -676,7 +682,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         runtime.backgroundTarget.setSize(exportDrawing.x,exportDrawing.y);
         if(current.effect==="None")runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current,withBackground);
       }
-      output.toBlob((blob) => {
+      const finish=(finalOutput:HTMLCanvasElement)=>finalOutput.toBlob((blob) => {
         if (blob) downloadBlob(blob, `${name}.png`);
         runtime.renderer.setSize(width, height, false);
         runtime.composer.setSize(width,height);
@@ -686,6 +692,17 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         runtime.camera.updateProjectionMatrix();
         runtime.scene.background=oldBackground;
       }, "image/png");
+      const current=latestPropsRef.current;
+      const materialMode=vgpuMaterialModes[current.material]??0,effectMode=vgpuEffectModes[current.effect]??0;
+      if(!ascii&&(materialMode>0||effectMode>0)){
+        void (async()=>{
+          const gpuOutput=document.createElement("canvas");
+          gpuOutput.width=1400;gpuOutput.height=1400;gpuOutput.style.width="1400px";gpuOutput.style.height="1400px";
+          const layer=await createVgpuPostLayer(runtime.renderer.domElement,gpuOutput);
+          layer.draw({materialMode,effectMode,intensity:current.effectIntensity/100,ior:current.glassIor,transparency:current.glassTransparency/100,time:performance.now()/1000});
+          await layer.settled();layer.dispose();finish(gpuOutput);
+        })().catch(error=>{console.warn("VGPU export unavailable; exporting the WebGL base render.",error);finish(output);});
+      }else finish(output);
     },
     exportObj(name) {
       const runtime = runtimeRef.current; if (!runtime) return;
@@ -727,6 +744,13 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
     host.appendChild(renderer.domElement);
+    const vgpuCanvas=document.createElement("canvas");
+    vgpuCanvas.className="vgpu-output";
+    vgpuCanvas.setAttribute("aria-label","VGPU material and post-processing output");
+    vgpuCanvas.style.visibility="hidden";
+    host.appendChild(vgpuCanvas);
+    let vgpuLayer:Awaited<ReturnType<typeof createVgpuPostLayer>>|null=null,vgpuDisposed=false;
+    void createVgpuPostLayer(renderer.domElement,vgpuCanvas).then(layer=>{if(vgpuDisposed)layer.dispose();else{vgpuLayer=layer;vgpuCanvas.dataset.ready="true";}}).catch(error=>{vgpuCanvas.dataset.ready="false";console.warn("VGPU layer unavailable; using the WebGL base render.",error);});
     const asciiCanvas=document.createElement("canvas");
     asciiCanvas.className="ascii-output";
     asciiCanvas.setAttribute("aria-label","Real-time ASCII render");
@@ -782,6 +806,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       if(runtime.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
       if(latestPropsRef.current.material==="ASCII"){
         renderer.domElement.style.opacity="0";
+        vgpuCanvas.style.visibility="hidden";
         asciiCanvas.style.display="block";
         if(time-runtime.asciiLastFrame>42){
           const {width,height}=host.getBoundingClientRect();
@@ -793,12 +818,16 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         renderer.domElement.style.opacity="1";
         asciiCanvas.style.display="none";
         const current=latestPropsRef.current;
-        if(current.effect==="None")renderer.render(scene,camera);else renderWithEffects(runtime,current,true);
+        const legacyEffect=effectModes[current.effect]!==undefined&&current.effect!=="None";
+        if(legacyEffect)renderWithEffects(runtime,current,true);else renderer.render(scene,camera);
+        const materialMode=vgpuMaterialModes[current.material]??0,effectMode=vgpuEffectModes[current.effect]??0,vgpuActive=materialMode>0||effectMode>0;
+        vgpuCanvas.style.visibility=vgpuActive?"visible":"hidden";
+        if(vgpuActive&&vgpuLayer)vgpuLayer.draw({materialMode,effectMode,intensity:current.effectIntensity/100,ior:current.glassIor,transparency:current.glassTransparency/100,time:time/1000});
       }
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);vgpuDisposed=true;vgpuLayer?.dispose();backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(vgpuCanvas);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {

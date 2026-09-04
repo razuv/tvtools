@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
 import { defineConfig } from "vite";
 
 const base = process.env.PLAYTOOLS_PAGES_BASE ?? "/";
@@ -9,7 +10,7 @@ export default defineConfig({
   define: {
     global: "globalThis",
   },
-  plugins: [react()],
+  plugins: [wgslVitePlugin(), react()],
   publicDir: "../public",
   build: {
     outDir: "../dist-pages",
