@@ -11,12 +11,19 @@ struct Params {
 }
 
 @group(0) @binding(0) var scene: texture_2d<f32>;
-@group(0) @binding(1) var<uniform> params: Params;
+@group(0) @binding(1) var depthTex: texture_depth_2d;
+@group(0) @binding(2) var<uniform> params: Params;
 
 fn sampleScene(uv: vec2f) -> vec4f {
   let dimensions = vec2f(textureDimensions(scene));
   let pixel = vec2i(clamp(uv * dimensions, vec2f(0.0), dimensions - 1.0));
   return textureLoad(scene, pixel, 0);
+}
+
+fn sampleDepth(uv: vec2f) -> f32 {
+  let dimensions = vec2f(textureDimensions(depthTex));
+  let pixel = vec2i(clamp(uv * dimensions, vec2f(0.0), dimensions - 1.0));
+  return textureLoad(depthTex, pixel, 0);
 }
 
 fn luminance(color: vec3f) -> f32 {
@@ -25,6 +32,13 @@ fn luminance(color: vec3f) -> f32 {
 
 fn spectrum(t: f32) -> vec3f {
   return 0.5 + 0.5 * cos(6.28318 * (t + vec3f(0.0, 0.333, 0.667)));
+}
+
+fn reconstructWorldPos(uv: vec2f, depth: f32, invProj: mat4x4f, invView: mat4x4f) -> vec3f {
+  let clip = vec4f(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+  let view = invProj * clip;
+  let world = invView * vec4f(view.xyz / view.w, 1.0);
+  return world.xyz / world.w;
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -47,17 +61,24 @@ fn spectrum(t: f32) -> vec3f {
   var outputAlpha = base.a;
 
   if (params.materialMode == 1.0 || params.effectMode == 1.0) {
+    let depth = sampleDepth(uv);
+    let hasGeometry = depth < 1.0;
+    
     let bendAmount = (0.010 + (params.ior - 1.0) * 0.045) * (0.35 + ray) * strength;
     let bend = (gradient * 0.8 + aspectDirection * (0.35 + edge)) * bendAmount;
+    
     let red = sampleScene(uv + bend * 1.22).r;
     let green = sampleScene(uv + bend).g;
     let blue = sampleScene(uv + bend * 0.72).b;
     let refracted = vec3f(red, green, blue);
+    
     let beamCoordinate = dot(uv - 0.5, vec2f(-aspectDirection.y, aspectDirection.x));
     let beam = exp(-abs(beamCoordinate - sin(params.time * 0.35) * 0.08) * (28.0 - ray * 12.0));
     let caustic = pow(max(0.0, dot(normalize(gradient + vec2f(0.0001)), aspectDirection)), 5.0);
-    color = mix(base.rgb, refracted, (0.50 + params.transparency * 0.42) * strength);
-    color += (vec3f(0.12, 0.45, 1.0) * edge + mix(vec3f(0.08, 0.38, 1.0), vec3f(0.75, 0.95, 1.0), beam) * (beam * 1.15 + caustic) * ray) * strength;
+    
+    let refractionMask = hasGeometry ? 1.0 : 0.0;
+    color = mix(base.rgb, refracted, (0.50 + params.transparency * 0.42) * strength * refractionMask);
+    color += (vec3f(0.12, 0.45, 1.0) * edge + mix(vec3f(0.08, 0.38, 1.0), vec3f(0.75, 0.95, 1.0), beam) * (beam * 1.15 + caustic) * ray) * strength * refractionMask;
   }
 
   if (params.materialMode == 2.0) {
