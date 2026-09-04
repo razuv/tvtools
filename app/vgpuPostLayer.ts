@@ -1,7 +1,7 @@
 import { effect, frame, init, surface } from "vgpu";
 import postShader from "./vgpu-post.wgsl";
 
-export type VgpuPostOptions={materialMode:number;effectMode:number;intensity:number;ior:number;transparency:number;time:number};
+export type VgpuPostOptions={materialMode:number;effectMode:number;intensity:number;ior:number;transparency:number;rayAngle:number;rayStrength:number;time:number};
 
 export async function createVgpuPostLayer(source:HTMLCanvasElement,output:HTMLCanvasElement){
   const gpu=await init();
@@ -10,7 +10,7 @@ export async function createVgpuPostLayer(source:HTMLCanvasElement,output:HTMLCa
   const sourceTexture=gpu.device.createTexture({label:"playtools.webgl-frame",size:[width,height],format:"rgba8unorm",usage:["copy_dst","texture_binding"]});
   output.width=width;output.height=height;
   const outputSurface=surface(gpu,output,{dpr:1});
-  const post=effect(gpu,postShader,{label:"playtools.vgpu-post",set:{scene:sourceTexture,params:{resolution:[1,1],time:0,materialMode:0,effectMode:0,intensity:1,ior:1.5,transparency:.88}}});
+  const post=effect(gpu,postShader,{label:"playtools.vgpu-post",set:{scene:sourceTexture,params:{resolution:[1,1],time:0,materialMode:0,effectMode:0,intensity:1,ior:1.5,transparency:.88,rayAngle:35,rayStrength:.7}}});
   let disposed=false,busy=false,lastDraw=0,pending:Promise<void>=Promise.resolve();
   const resize=()=>{
     const nextWidth=Math.max(1,source.width),nextHeight=Math.max(1,source.height);
