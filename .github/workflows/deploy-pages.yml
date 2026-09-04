@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, experimental]
   workflow_dispatch:
 
 permissions:
@@ -18,25 +18,60 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out main
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Check out experimental
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          path: experimental
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Install dependencies
+          cache-dependency-path: |
+            main/package-lock.json
+            experimental/package-lock.json
+
+      - name: Install main dependencies
+        working-directory: main
         run: npm ci
-      - name: Build static site
+
+      - name: Build main site
+        working-directory: main
         run: npm run build
         env:
           PLAYTOOLS_PAGES_BASE: /tvtools/
+
+      - name: Install experimental dependencies
+        working-directory: experimental
+        run: npm ci
+
+      - name: Build experimental site
+        working-directory: experimental
+        run: npm run build
+        env:
+          PLAYTOOLS_PAGES_BASE: /tvtools/experimental/
+
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p site/experimental
+          cp -R main/dist-pages/. site/
+          cp -R experimental/dist-pages/. site/experimental/
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist-pages
+          path: site
 
   deploy:
     environment:
