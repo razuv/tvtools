@@ -40,6 +40,8 @@ type StageProps = {
   colorOpacity: number;
   glassIor: number;
   glassTransparency: number;
+  glassReflection: number;
+  glassFrost: number;
   vgpuRayAngle: number;
   vgpuRayStrength: number;
   roughness: number;
@@ -89,8 +91,8 @@ type Runtime = {
   composer: EffectComposer;
   effectPass: ShaderPass;
   backgroundTarget: THREE.WebGLRenderTarget;
-  depthTarget: THREE.WebGLRenderTarget;
-  depthCanvas: HTMLCanvasElement;
+  maskTarget: THREE.WebGLRenderTarget;
+  maskCanvas: HTMLCanvasElement;
   controls: OrbitControls;
   model: THREE.Group;
   key: THREE.DirectionalLight;
@@ -107,8 +109,8 @@ type Runtime = {
 };
 
 const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Glow:8,"VGPU Refraction":9,"VGPU Bloom":10,"VGPU Filmic":11};
-const vgpuFallbackMaterialModes:Record<string,number>={"VGPU Glass":9};
-const vgpuMaterialModes:Record<string,number>={"VGPU Glass":1};
+const vgpuFallbackMaterialModes:Record<string,number>={"VGPU Glass":9,"VGPU Holographic":13,"VGPU Lava":14};
+const vgpuMaterialModes:Record<string,number>={"VGPU Glass":1,"VGPU Holographic":2,"VGPU Lava":3};
 const vgpuEffectModes:Record<string,number>={"VGPU Refraction":1,"VGPU Bloom":2,"VGPU Filmic":3};
 const postEffectShader={
   uniforms:{
@@ -232,14 +234,17 @@ const postEffectShader={
         float vignette=smoothstep(.88,.2,length((vUv-.5)*vec2(1.0,resolution.y/resolution.x)));
         float grain=fract(sin(dot(vUv*resolution+time,vec2(12.9898,78.233)))*43758.5453)-.5;
         result=mix(base.rgb,pow(max(graded,vec3(0.0)),vec3(.88))*mix(.68,1.06,vignette)+grain*.045,amount);
-      }else if(mode>11.5&&mode<12.5){
-        float phase=dot(vUv,vec2(2.8,1.6))+time*.055;
-        vec3 spectral=.5+.5*cos(6.28318*(phase+vec3(0.0,.333,.667)));
-        float band=pow(.5+.5*sin(phase*15.0),5.0);result=mix(base.rgb,spectral*(1.0+band*.9),.88*amount);
       }else if(mode>12.5&&mode<13.5){
-        float interference=dot(vUv,vec2(41.0,23.0))+sin(vUv.y*38.0-time*1.7)*2.5+time*1.1;
-        vec3 foil=.5+.5*cos(6.28318*(fract(interference*.055)+vec3(0.0,.333,.667)));
-        float shimmer=pow(.5+.5*sin(interference*1.7),8.0);result=mix(base.rgb,foil*(.68+shimmer*1.3),.9*amount)+vec3(.35,.65,1.0)*shimmer*.55*amount;
+        float sweep=dot(vUv,vec2(.78,.62))*6.0+sin(vUv.y*8.0-time*.18)*.45;
+        vec3 foil=.66+.34*cos(6.28318*(sweep+vec3(0.0,.31,.63)));
+        float silk=.82+.18*sin((vUv.x-vUv.y)*75.0+time*.35);
+        result=mix(base.rgb,mix(vec3(.78,.84,.86),foil,.62)*silk,.88*amount);
+      }else if(mode>13.5&&mode<14.5){
+        float n=sin(vUv.x*19.0+sin(vUv.y*13.0+time*.8))*sin(vUv.y*17.0-time*.55);
+        float hot=smoothstep(-.15,.82,n);
+        vec3 lava=mix(vec3(.025,.002,.001),vec3(.78,.025,.0),smoothstep(-.5,.35,n));
+        lava=mix(lava,vec3(1.0,.82,.08),pow(hot,3.0));
+        result=mix(base.rgb,lava,amount);
       }
       vec4 outputColor=vec4(result,outputAlpha);
       if(compositeBackground>.5){
@@ -249,96 +254,6 @@ const postEffectShader={
 gl_FragColor=outputColor;
     }`,
   };
-
-const prismMaterialShader = {
-  uniforms: {
-    time: { value: 0 },
-    ior: { value: 1.5 },
-    dispersion: { value: 0.08 },
-    viewVector: { value: new THREE.Vector3() },
-    worldCameraPosition: { value: new THREE.Vector3() },
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-    varying vec3 vViewDir;
-    void main() {
-      vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-      vNormal = normalize(normalMatrix * normal);
-      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      vViewDir = normalize(-mvPosition.xyz);
-      gl_Position = projectionMatrix * mvPosition;
-    }
-  `,
-  fragmentShader: `
-    uniform float time;
-    uniform float ior;
-    uniform float dispersion;
-    uniform vec3 viewVector;
-    uniform vec3 worldCameraPosition;
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-    varying vec3 vViewDir;
-
-    vec3 spectrum(float t) {
-      return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.333, 0.667)));
-    }
-
-    void main() {
-      vec3 viewDir = normalize(worldCameraPosition - vWorldPosition);
-      float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 3.0);
-      float phase = dot(vWorldPosition, vec3(2.8, 1.6, 0.0)) + time * 0.055;
-      vec3 spectral = spectrum(fract(phase));
-      float band = pow(0.5 + 0.5 * sin(phase * 15.0), 5.0);
-      vec3 color = spectral * (1.0 + band * 0.9);
-      color += spectral * fresnel * 0.65;
-      float transparency = 0.28;
-      gl_FragColor = vec4(color, transparency);
-    }
-  `,
-};
-
-const holographicMaterialShader = {
-  uniforms: {
-    time: { value: 0 },
-    viewVector: { value: new THREE.Vector3() },
-    worldCameraPosition: { value: new THREE.Vector3() },
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-    varying vec2 vUv;
-    void main() {
-      vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-      vNormal = normalize(normalMatrix * normal);
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform float time;
-    uniform vec3 worldCameraPosition;
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-    varying vec2 vUv;
-
-    vec3 spectrum(float t) {
-      return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.333, 0.667)));
-    }
-
-    void main() {
-      vec3 viewDir = normalize(worldCameraPosition - vWorldPosition);
-      float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.0);
-      float interference = dot(vUv, vec2(41.0, 23.0)) + sin(vUv.y * 38.0 - time * 1.7) * 2.5 + time * 1.1;
-      vec3 foil = spectrum(fract(interference * 0.055));
-      float shimmer = pow(0.5 + 0.5 * sin(interference * 1.7), 8.0);
-      vec3 color = foil * (0.68 + shimmer * 1.3);
-      color += vec3(0.35, 0.65, 1.0) * shimmer * 0.55;
-      color = mix(vec3(0.0), color, 0.78 + fresnel * 0.2);
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
-};
 
 function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true,time=0){
   runtime.effectPass.uniforms.mode.value=props.effect!=="None"?(effectModes[props.effect]??0):(vgpuFallbackMaterialModes[props.material]??0);
@@ -730,47 +645,17 @@ function loadTexture(url: string, color = false) {
   return texture;
 }
 
-const prismMaterialCache = new Map<string, THREE.ShaderMaterial>();
-const holographicMaterialCache = new Map<string, THREE.ShaderMaterial>();
-
-function getPrismMaterial(color: string, roughness: number, glassIor: number, glassTransparency: number, colorOpacity: number) {
-  const key = `${color}:${roughness}:${glassIor}:${glassTransparency}:${colorOpacity}`;
-  if (prismMaterialCache.has(key)) return prismMaterialCache.get(key)!;
-  const material = new THREE.ShaderMaterial({
-    ...prismMaterialShader,
-    uniforms: THREE.UniformsUtils.clone(prismMaterialShader.uniforms),
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  material.uniforms.ior.value = glassIor;
-  prismMaterialCache.set(key, material);
-  return material;
-}
-
-function getHolographicMaterial(color: string, roughness: number, colorOpacity: number) {
-  const key = `${color}:${roughness}:${colorOpacity}`;
-  if (holographicMaterialCache.has(key)) return holographicMaterialCache.get(key)!;
-  const material = new THREE.ShaderMaterial({
-    ...holographicMaterialShader,
-    uniforms: THREE.UniformsUtils.clone(holographicMaterialShader.uniforms),
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: true,
-  });
-  holographicMaterialCache.set(key, material);
-  return material;
-}
-
-function makeMaterial(kind: string, color: string, roughness: number, repeat: number, rotation: number, tint: number, normalStrength: number, colorOpacity: number, glassIor: number, glassTransparency: number, customMaterialUrl?:string) {
+function makeMaterial(kind: string, color: string, roughness: number, repeat: number, rotation: number, tint: number, normalStrength: number, colorOpacity: number, glassIor: number, glassTransparency: number, glassReflection: number, glassFrost: number, customMaterialUrl?:string) {
   const value = new THREE.Color(color);
   const r = roughness / 100;
   const alpha = colorOpacity / 100;
+  const reflection = glassReflection / 100;
+  const frost = glassFrost / 100;
   let result: THREE.Material;
-  if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.015,r*.28), metalness:0, transmission:glassTransparency/100, thickness:1.8, ior:glassIor, dispersion:.035, transparent:true, opacity:alpha, clearcoat:1, clearcoatRoughness:.025, envMapIntensity:1.8, attenuationColor:value, attenuationDistance:3.5 });
-  else if (kind === "VGPU Glass") result = new THREE.MeshPhysicalMaterial({color:value,roughness:Math.max(.01,r*.18),metalness:0,transmission:Math.max(.72,glassTransparency/100),thickness:2.6,ior:glassIor,dispersion:.08,transparent:true,opacity:alpha,clearcoat:1,clearcoatRoughness:.01,envMapIntensity:2.4,attenuationColor:value,attenuationDistance:4.5});
-  else if (kind === "VGPU Prism") result = getPrismMaterial(color, roughness, glassIor, glassTransparency, colorOpacity);
-  else if (kind === "VGPU Holographic") result = getHolographicMaterial(color, roughness, colorOpacity);
+  if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.012,frost*.82+r*.16), metalness:0, transmission:(glassTransparency/100)*(1-frost*.18), thickness:1.8, ior:glassIor, dispersion:.035*(1-frost), transparent:true, opacity:alpha, reflectivity:reflection, clearcoat:reflection, clearcoatRoughness:.02+frost*.5, envMapIntensity:.25+reflection*3.2, attenuationColor:value, attenuationDistance:2.5+frost*2 });
+  else if (kind === "VGPU Glass") result = new THREE.MeshPhysicalMaterial({color:value,roughness:Math.max(.008,frost*.72+r*.12),metalness:0,transmission:Math.max(.68,glassTransparency/100)*(1-frost*.14),thickness:2.8,ior:glassIor,dispersion:.1*(1-frost*.55),transparent:true,opacity:alpha,reflectivity:reflection,clearcoat:reflection,clearcoatRoughness:.008+frost*.42,envMapIntensity:.4+reflection*3.8,attenuationColor:value,attenuationDistance:3.8});
+  else if (kind === "VGPU Holographic") result = new THREE.MeshPhysicalMaterial({color:new THREE.Color("#eef4f5").lerp(value,.12),roughness:.14,metalness:.62,iridescence:1,iridescenceIOR:1.72,iridescenceThicknessRange:[160,860],clearcoat:1,clearcoatRoughness:.045,envMapIntensity:2.8});
+  else if (kind === "VGPU Lava") result = new THREE.MeshStandardMaterial({color:new THREE.Color("#ff3b08"),roughness:.58,metalness:.04,emissive:new THREE.Color("#9c0800"),emissiveIntensity:1.5});
   else if (kind === "Metal") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.12,r), metalness:.88 });
   else if (kind === "Chrome") result = new THREE.MeshPhysicalMaterial({ color:new THREE.Color("#f3f5f7"), roughness:Math.max(.025,r*.22), metalness:1, clearcoat:1, clearcoatRoughness:.02, envMapIntensity:2.8 });
   else if (kind === "ASCII") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.16,r), metalness:.08 });
@@ -794,7 +679,7 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
   }
   else if (kind === "Clay") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.82,r), metalness:0 });
   else result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.06,r*.7), metalness:.04, clearcoat:1, clearcoatRoughness:.08 });
-  if(kind!=="Glass" && kind!=="VGPU Glass" && kind!=="VGPU Prism"){result.opacity=alpha;result.transparent=alpha<.999;result.depthWrite=alpha>.96;}
+  if(kind!=="Glass" && kind!=="VGPU Glass"){result.opacity=alpha;result.transparent=alpha<.999;result.depthWrite=alpha>.96;}
   result.side = THREE.DoubleSide;
   result.shadowSide = THREE.DoubleSide;
   return result;
@@ -901,11 +786,11 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     composer.addPass(effectPass);
     composer.addPass(new OutputPass());
     const backgroundTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat});
-    const depthTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat, type:THREE.FloatType});
-    const depthCanvas=document.createElement("canvas");
-    depthCanvas.style.display="none";
-    host.appendChild(depthCanvas);
-    const depthContext = depthCanvas.getContext("2d")!;
+    const maskTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat,type:THREE.UnsignedByteType,depthBuffer:true});
+    const maskCanvas=document.createElement("canvas");
+    maskCanvas.style.display="none";
+    host.appendChild(maskCanvas);
+    const maskContext = maskCanvas.getContext("2d")!;
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
@@ -924,7 +809,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .7; controls.maxDistance = 24; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
     const model = new THREE.Group(); model.rotation.set(0,0,0); scene.add(model);
-    const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    const maskMaterial = new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide});
     const ambient=new THREE.HemisphereLight(0xffffff,0x202020,1.8);scene.add(ambient);
     const key = new THREE.DirectionalLight(0xffffff, 4.2); key.position.set(-3, 5, 5);
     key.castShadow = true;
@@ -941,7 +826,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, composer, effectPass, backgroundTarget, depthTarget, depthCanvas, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { scene, camera, renderer, composer, effectPass, backgroundTarget, maskTarget, maskCanvas, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
@@ -960,12 +845,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       if(event.data.error)return;
       const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(event.data.position,3));geometry.setAttribute("normal",new THREE.BufferAttribute(event.data.normal,3));if(event.data.uv.length)geometry.setAttribute("uv",new THREE.BufferAttribute(event.data.uv,2));geometry.computeBoundingBox();geometry.computeBoundingSphere();
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
-      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
+      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.glassReflection,current.glassFrost,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
     };
     const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
     void createVgpuPostLayer(renderer.domElement,vgpuCanvas).then(layer=>{if(vgpuDisposed)layer.dispose();else{vgpuLayer=layer;vgpuCanvas.dataset.ready="true";}}).catch(error=>{vgpuCanvas.dataset.ready="false";console.warn("VGPU layer unavailable; using the WebGL base render.",error);});
-    let frame = 0;const demoStart=performance.now();
+    let frame = 0;let lastVgpuTransfer=0;const demoStart=performance.now();
     const loop = (time=0) => {
       controls.update();
       const runtime=runtimeRef.current;
@@ -998,36 +883,45 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         
         const materialMode=vgpuMaterialModes[current.material]??0,effectMode=vgpuEffectModes[current.effect]??0,vgpuActive=materialMode>0||effectMode>0;
         vgpuCanvas.style.visibility=vgpuActive?"visible":"hidden";
-        if(vgpuActive&&vgpuLayer){
+        if(vgpuActive&&vgpuLayer&&time-lastVgpuTransfer>=32){
+          lastVgpuTransfer=time;
           const drawing = renderer.getDrawingBufferSize(new THREE.Vector2());
-          runtime.depthTarget.setSize(drawing.x, drawing.y);
+          runtime.maskTarget.setSize(drawing.x, drawing.y);
           const prevOverride = scene.overrideMaterial;
-          scene.overrideMaterial = depthMaterial;
-          renderer.setRenderTarget(runtime.depthTarget);
+          const prevBackground=scene.background;
+          const prevFloorVisible=runtime.shadowFloor.visible;
+          const prevClearColor=renderer.getClearColor(new THREE.Color()).clone();
+          const prevClearAlpha=renderer.getClearAlpha();
+          scene.overrideMaterial = maskMaterial;
+          scene.background=null;
+          runtime.shadowFloor.visible=false;
+          renderer.setClearColor(0x000000,0);
+          renderer.setRenderTarget(runtime.maskTarget);
+          renderer.clear();
           renderer.render(scene, camera);
           renderer.setRenderTarget(null);
           scene.overrideMaterial = prevOverride;
-          runtime.depthCanvas.width = drawing.x;
-          runtime.depthCanvas.height = drawing.y;
-          const pixelBuffer = new Float32Array(drawing.x * drawing.y * 4);
-          renderer.readRenderTargetPixels(runtime.depthTarget, 0, 0, drawing.x, drawing.y, pixelBuffer);
-          const imgData = depthContext.createImageData(drawing.x, drawing.y);
-          for(let i=0;i<drawing.x*drawing.y;i++){
-            const depth = pixelBuffer[i*4];
-            const packed = depth * 255;
-            imgData.data[i*4] = packed;
-            imgData.data[i*4+1] = packed;
-            imgData.data[i*4+2] = packed;
-            imgData.data[i*4+3] = 255;
+          scene.background=prevBackground;
+          runtime.shadowFloor.visible=prevFloorVisible;
+          renderer.setClearColor(prevClearColor,prevClearAlpha);
+          runtime.maskCanvas.width = drawing.x;
+          runtime.maskCanvas.height = drawing.y;
+          const pixelBuffer = new Uint8Array(drawing.x * drawing.y * 4);
+          renderer.readRenderTargetPixels(runtime.maskTarget, 0, 0, drawing.x, drawing.y, pixelBuffer);
+          const imgData = maskContext.createImageData(drawing.x, drawing.y);
+          const rowBytes=drawing.x*4;
+          for(let y=0;y<drawing.y;y++){
+            const sourceRow=(drawing.y-1-y)*rowBytes;
+            imgData.data.set(pixelBuffer.subarray(sourceRow,sourceRow+rowBytes),y*rowBytes);
           }
-          depthContext.putImageData(imgData, 0, 0);
-          vgpuLayer.draw({materialMode,effectMode,intensity:current.effectIntensity/100,ior:current.glassIor,transparency:current.glassTransparency/100,rayAngle:current.vgpuRayAngle,rayStrength:current.vgpuRayStrength/100,time:time/1000}, runtime.depthCanvas);
+          maskContext.putImageData(imgData, 0, 0);
+          vgpuLayer.draw({materialMode,effectMode,intensity:current.effectIntensity/100,ior:current.glassIor,transparency:current.glassTransparency/100,reflection:current.glassReflection/100,frost:current.glassFrost/100,rayAngle:current.vgpuRayAngle,rayStrength:current.vgpuRayStrength/100,time:time/1000}, runtime.maskCanvas);
         }
       }
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);vgpuDisposed=true;vgpuLayer?.dispose();backgroundTarget.dispose();depthTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(vgpuCanvas);host.removeChild(asciiCanvas);host.removeChild(depthCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);vgpuDisposed=true;vgpuLayer?.dispose();backgroundTarget.dispose();maskTarget.dispose();maskMaterial.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(vgpuCanvas);host.removeChild(asciiCanvas);host.removeChild(maskCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -1058,8 +952,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
-    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl); old.dispose(); } });
-  }, [props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
+    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.glassReflection,props.glassFrost,props.customMaterialUrl); old.dispose(); } });
+  }, [props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.glassReflection,props.glassFrost]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);
 
