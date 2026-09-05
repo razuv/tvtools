@@ -13,6 +13,7 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js";
 import { EndType, FillRule, inflatePathsD, JoinType, simplifyPathD, unionD, type PathD } from "clipper2-ts";
 import { createVgpuPostLayer } from "./vgpuPostLayer";
+import { createVgpuMaterialLayer, type VgpuSceneMaterial } from "./vgpuMaterialLayer";
 
 export type StageHandle = {
   reset: () => void;
@@ -91,8 +92,6 @@ type Runtime = {
   composer: EffectComposer;
   effectPass: ShaderPass;
   backgroundTarget: THREE.WebGLRenderTarget;
-  maskTarget: THREE.WebGLRenderTarget;
-  maskCanvas: HTMLCanvasElement;
   controls: OrbitControls;
   model: THREE.Group;
   key: THREE.DirectionalLight;
@@ -108,10 +107,9 @@ type Runtime = {
   lastRotationEmit: number;
 };
 
-const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Glow:8,"VGPU Refraction":9,"VGPU Bloom":10,"VGPU Filmic":11};
-const vgpuFallbackMaterialModes:Record<string,number>={"VGPU Glass":9,"VGPU Holographic":13,"VGPU Lava":14};
-const vgpuMaterialModes:Record<string,number>={"VGPU Glass":1,"VGPU Holographic":2,"VGPU Lava":3};
-const vgpuEffectModes:Record<string,number>={"VGPU Refraction":1,"VGPU Bloom":2,"VGPU Filmic":3};
+const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Glow:8};
+const vgpuMaterials = new Set<VgpuSceneMaterial>(["VGPU Glass", "VGPU Holographic", "VGPU Lava"]);
+const vgpuEffectModes:Record<string,number>={"VGPU Bloom":1,"VGPU Filmic":2};
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
@@ -256,7 +254,7 @@ gl_FragColor=outputColor;
   };
 
 function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true,time=0){
-  runtime.effectPass.uniforms.mode.value=props.effect!=="None"?(effectModes[props.effect]??0):(vgpuFallbackMaterialModes[props.material]??0);
+  runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
   runtime.effectPass.uniforms.intensity.value=props.effectIntensity/100;
   runtime.effectPass.uniforms.duotoneDarkColor.value.set(props.duotoneDarkColor);
   runtime.effectPass.uniforms.duotoneColor.value.set(props.duotoneColor);
@@ -735,7 +733,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         runtime.composer.setSize(1400,1400);
         const exportDrawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());
         runtime.backgroundTarget.setSize(exportDrawing.x,exportDrawing.y);
-        if(current.effect==="None"&&!vgpuFallbackMaterialModes[current.material])runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current,withBackground,performance.now());
+        if(current.effect==="None"||vgpuEffectModes[current.effect]!==undefined)runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current,withBackground,performance.now());
       }
       const finish=(finalOutput:HTMLCanvasElement)=>finalOutput.toBlob((blob) => {
         if (blob) downloadBlob(blob, `${name}.png`);
@@ -786,21 +784,23 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     composer.addPass(effectPass);
     composer.addPass(new OutputPass());
     const backgroundTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat});
-    const maskTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat,type:THREE.UnsignedByteType,depthBuffer:true});
-    const maskCanvas=document.createElement("canvas");
-    maskCanvas.style.display="none";
-    host.appendChild(maskCanvas);
-    const maskContext = maskCanvas.getContext("2d")!;
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
     host.appendChild(renderer.domElement);
-    const vgpuCanvas=document.createElement("canvas");
-    vgpuCanvas.className="vgpu-output";
-    vgpuCanvas.setAttribute("aria-label","VGPU material and post-processing output");
-    vgpuCanvas.style.visibility="hidden";
-    host.appendChild(vgpuCanvas);
-    let vgpuLayer:Awaited<ReturnType<typeof createVgpuPostLayer>>|null=null,vgpuDisposed=false;
+    const vgpuMaterialCanvas=document.createElement("canvas");
+    vgpuMaterialCanvas.className="vgpu-output vgpu-material-output";
+    vgpuMaterialCanvas.setAttribute("aria-label","WebGPU material output");
+    vgpuMaterialCanvas.style.visibility="hidden";
+    host.appendChild(vgpuMaterialCanvas);
+    const vgpuPostCanvas=document.createElement("canvas");
+    vgpuPostCanvas.className="vgpu-output vgpu-post-output";
+    vgpuPostCanvas.setAttribute("aria-label","VGPU post-processing output");
+    vgpuPostCanvas.style.visibility="hidden";
+    host.appendChild(vgpuPostCanvas);
+    let vgpuMaterialLayer:Awaited<ReturnType<typeof createVgpuMaterialLayer>>|null=null;
+    let vgpuPostLayer:Awaited<ReturnType<typeof createVgpuPostLayer>>|null=null;
+    let vgpuDisposed=false;
     const asciiCanvas=document.createElement("canvas");
     asciiCanvas.className="ascii-output";
     asciiCanvas.setAttribute("aria-label","Real-time ASCII render");
@@ -809,7 +809,6 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .7; controls.maxDistance = 24; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
     const model = new THREE.Group(); model.rotation.set(0,0,0); scene.add(model);
-    const maskMaterial = new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide});
     const ambient=new THREE.HemisphereLight(0xffffff,0x202020,1.8);scene.add(ambient);
     const key = new THREE.DirectionalLight(0xffffff, 4.2); key.position.set(-3, 5, 5);
     key.castShadow = true;
@@ -826,7 +825,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, composer, effectPass, backgroundTarget, maskTarget, maskCanvas, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
@@ -845,11 +844,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       if(event.data.error)return;
       const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(event.data.position,3));geometry.setAttribute("normal",new THREE.BufferAttribute(event.data.normal,3));if(event.data.uv.length)geometry.setAttribute("uv",new THREE.BufferAttribute(event.data.uv,2));geometry.computeBoundingBox();geometry.computeBoundingSphere();
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
-      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.glassReflection,current.glassFrost,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
+      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.glassReflection,current.glassFrost,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);vgpuMaterialLayer?.setGeometry(geometry);current.onReady?.(Math.round(event.data.triangles));
     };
-    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
+    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix();vgpuMaterialLayer?.resize(width,height); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
-    void createVgpuPostLayer(renderer.domElement,vgpuCanvas).then(layer=>{if(vgpuDisposed)layer.dispose();else{vgpuLayer=layer;vgpuCanvas.dataset.ready="true";}}).catch(error=>{vgpuCanvas.dataset.ready="false";console.warn("VGPU layer unavailable; using the WebGL base render.",error);});
+    void createVgpuMaterialLayer(vgpuMaterialCanvas).then(layer=>{if(vgpuDisposed){layer.dispose();return;}vgpuMaterialLayer=layer;const {width,height}=host.getBoundingClientRect();layer.resize(width,height);const currentMesh=runtimeRef.current?.model.children.find(child=>child instanceof THREE.Mesh) as THREE.Mesh|undefined;if(currentMesh)layer.setGeometry(currentMesh.geometry);vgpuMaterialCanvas.dataset.ready="true";}).catch(error=>{vgpuMaterialCanvas.dataset.ready="false";console.warn("WebGPU material renderer unavailable; using the WebGL fallback.",error);});
+    void createVgpuPostLayer(renderer.domElement,vgpuPostCanvas).then(layer=>{if(vgpuDisposed)layer.dispose();else{vgpuPostLayer=layer;vgpuPostCanvas.dataset.ready="true";}}).catch(error=>{vgpuPostCanvas.dataset.ready="false";console.warn("VGPU post-processing unavailable; using the WebGL base render.",error);});
     let frame = 0;let lastVgpuTransfer=0;const demoStart=performance.now();
     const loop = (time=0) => {
       controls.update();
@@ -868,7 +868,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
       if(current.material==="ASCII"){
         renderer.domElement.style.opacity="0";
-        vgpuCanvas.style.visibility="hidden";
+        vgpuMaterialCanvas.style.visibility="hidden";
+        vgpuPostCanvas.style.visibility="hidden";
         asciiCanvas.style.display="block";
         if(time-runtime.asciiLastFrame>42){
           const {width,height}=host.getBoundingClientRect();
@@ -876,52 +877,44 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
           runtime.asciiLastFrame=time;
         }
       }else{
-        renderer.domElement.style.opacity="1";
         asciiCanvas.style.display="none";
-        const legacyEffect=(effectModes[current.effect]!==undefined&&current.effect!=="None")||Boolean(vgpuFallbackMaterialModes[current.material]);
+        const legacyEffect=(effectModes[current.effect]??0)>0;
         if(legacyEffect)renderWithEffects(runtime,current,true,time);else renderer.render(scene,camera);
-        
-        const materialMode=vgpuMaterialModes[current.material]??0,effectMode=vgpuEffectModes[current.effect]??0,vgpuActive=materialMode>0||effectMode>0;
-        vgpuCanvas.style.visibility=vgpuActive?"visible":"hidden";
-        if(vgpuActive&&vgpuLayer&&time-lastVgpuTransfer>=32){
+
+        const useRefraction=current.effect==="VGPU Refraction";
+        const sceneMaterial=(useRefraction?"VGPU Glass":current.material) as VgpuSceneMaterial;
+        const materialActive=useRefraction||vgpuMaterials.has(sceneMaterial);
+        const materialDrawn=Boolean(materialActive&&vgpuMaterialLayer?.draw(camera,model,{
+          material:sceneMaterial,
+          color:current.color,
+          roughness:current.roughness/100,
+          transparency:current.glassTransparency/100,
+          ior:current.glassIor,
+          reflection:current.glassReflection/100,
+          frost:current.glassFrost/100,
+          rayAngle:current.vgpuRayAngle,
+          rayStrength:current.vgpuRayStrength/100,
+          showRay:useRefraction||sceneMaterial==="VGPU Glass",
+          light:current.light,
+          ambientLight:current.ambientLight,
+          lightPosition:[current.lightX,current.lightY,current.lightZ],
+          background:scene.background,
+        }));
+        renderer.domElement.style.opacity=materialDrawn?"0":"1";
+        vgpuMaterialCanvas.style.visibility=materialDrawn?"visible":"hidden";
+
+        const effectMode=vgpuEffectModes[current.effect]??0;
+        const postActive=!materialDrawn&&effectMode>0;
+        vgpuPostCanvas.style.visibility=postActive?"visible":"hidden";
+        if(postActive&&vgpuPostLayer&&time-lastVgpuTransfer>=32){
           lastVgpuTransfer=time;
-          const drawing = renderer.getDrawingBufferSize(new THREE.Vector2());
-          runtime.maskTarget.setSize(drawing.x, drawing.y);
-          const prevOverride = scene.overrideMaterial;
-          const prevBackground=scene.background;
-          const prevFloorVisible=runtime.shadowFloor.visible;
-          const prevClearColor=renderer.getClearColor(new THREE.Color()).clone();
-          const prevClearAlpha=renderer.getClearAlpha();
-          scene.overrideMaterial = maskMaterial;
-          scene.background=null;
-          runtime.shadowFloor.visible=false;
-          renderer.setClearColor(0x000000,0);
-          renderer.setRenderTarget(runtime.maskTarget);
-          renderer.clear();
-          renderer.render(scene, camera);
-          renderer.setRenderTarget(null);
-          scene.overrideMaterial = prevOverride;
-          scene.background=prevBackground;
-          runtime.shadowFloor.visible=prevFloorVisible;
-          renderer.setClearColor(prevClearColor,prevClearAlpha);
-          runtime.maskCanvas.width = drawing.x;
-          runtime.maskCanvas.height = drawing.y;
-          const pixelBuffer = new Uint8Array(drawing.x * drawing.y * 4);
-          renderer.readRenderTargetPixels(runtime.maskTarget, 0, 0, drawing.x, drawing.y, pixelBuffer);
-          const imgData = maskContext.createImageData(drawing.x, drawing.y);
-          const rowBytes=drawing.x*4;
-          for(let y=0;y<drawing.y;y++){
-            const sourceRow=(drawing.y-1-y)*rowBytes;
-            imgData.data.set(pixelBuffer.subarray(sourceRow,sourceRow+rowBytes),y*rowBytes);
-          }
-          maskContext.putImageData(imgData, 0, 0);
-          vgpuLayer.draw({materialMode,effectMode,intensity:current.effectIntensity/100,ior:current.glassIor,transparency:current.glassTransparency/100,reflection:current.glassReflection/100,frost:current.glassFrost/100,rayAngle:current.vgpuRayAngle,rayStrength:current.vgpuRayStrength/100,time:time/1000}, runtime.maskCanvas);
+          vgpuPostLayer.draw({effectMode,intensity:current.effectIntensity/100,time:time/1000});
         }
       }
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);vgpuDisposed=true;vgpuLayer?.dispose();backgroundTarget.dispose();maskTarget.dispose();maskMaterial.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(vgpuCanvas);host.removeChild(asciiCanvas);host.removeChild(maskCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);vgpuDisposed=true;vgpuMaterialLayer?.dispose();vgpuPostLayer?.dispose();backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(vgpuMaterialCanvas);host.removeChild(vgpuPostCanvas);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {
