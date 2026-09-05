@@ -228,6 +228,19 @@ export fn bakeMicroDetail(tileUv: vec2f) -> vec4f {
   return vec4f(calibratedGrain, derivative, calibratedStreak);
 }
 
+// Displacement normal from the baked displacement volume gradient.
+// Returns a smooth normal suitable for vertex displacement that doesn't
+// split at hard edges. Uses central differences on the displacement scalar field.
+export fn sampleDisplacementNormal(position: vec3f, t: f32) -> vec3f {
+  let eps = 0.015;
+  let cx = sampleDisplacementVolume(position + vec3f(eps, 0.0, 0.0), t).x;
+  let cy = sampleDisplacementVolume(position + vec3f(0.0, eps, 0.0), t).x;
+  let cz = sampleDisplacementVolume(position + vec3f(0.0, 0.0, eps), t).x;
+  let c0 = sampleDisplacementVolume(position, t).x;
+  let grad = vec3f(cx - c0, cy - c0, cz - c0) / eps;
+  return normalize(grad);
+}
+
 // Seamless sharp-crust tile over a four-unit object-space period. R stores
 // the combined scab height, GB its derivatives with respect to normalized
 // tile UV, and A the union of vesicle pits and coarse flake seams. The

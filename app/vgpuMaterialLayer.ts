@@ -99,12 +99,8 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
       }
       volumes = baked;
       lava = createLavaMaterial({ volumes: baked });
-      // The official demo uses smooth, welded primitives. Playtools extrusion
-      // deliberately duplicates vertices at hard cap/side edges; displacing
-      // those vertices along different face normals pulls the shell apart.
-      // Keep the complete procedural shading and bump pipeline, but leave the
-      // watertight user mesh positions intact.
-      lava.material.positionNode = null;
+      // Displacement now uses a smooth normal from the displacement field gradient
+      // (sampleDisplacementNormal) so it remains watertight at hard edges.
       lava.material.side = WEBGPU.DoubleSide;
       lava.scale.value = Math.min(1.05, 1.8 / Math.max(1, geometryRadius));
       lava.glowIntensity.value = 1.75;

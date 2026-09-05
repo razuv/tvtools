@@ -37,6 +37,7 @@ export type TransmissionOptions = {
   frost: number;
   rayAngle: number;
   rayStrength: number;
+  dispersion: number;
   background: THREE.Scene["background"];
 };
 
@@ -214,6 +215,9 @@ export async function createVgpuTransmissionLayer(_source: HTMLCanvasElement, ou
       model.updateMatrixWorld(true);
       const effectiveRoughness = Math.max(0.004, options.roughness * 0.2 + options.frost * 0.82);
       const absorption = hexToAbsorption(options.color);
+      // Use a subtle dispersion by default, controllable via options.dispersion (0-1)
+      const dispersion = Math.max(0, Math.min(1, options.dispersion ?? 0.35));
+      const dispersionSpread = 0.01 + dispersion * 0.08;
 
       try {
         const backgroundValue=options.background as unknown as {isColor?:boolean;getStyle?:()=>string;isTexture?:boolean;image?:CanvasImageSource};
@@ -248,16 +252,18 @@ export async function createVgpuTransmissionLayer(_source: HTMLCanvasElement, ou
             ior: options.ior,
             roughness: effectiveRoughness,
             thickness: 0.45 + options.rayStrength * 1.25,
-            dispersion: 1,
+            dispersion: dispersion,
             absorption,
             scene_levels: currentTargets.levels.length + 1,
             env_size: ENV_SIZE,
             texel_angle: (2 * Math.PI) / ENV_SIZE[0],
-            dispersion_spread: 0.025 + options.rayStrength * 0.14,
+            dispersion_spread: dispersionSpread,
             reflection_strength: options.reflection,
             transparency: options.transparency,
             ray_angle: options.rayAngle,
             ray_strength: options.rayStrength,
+            refraction_mode: 1.0,
+            double_amount: 1.0,
           },
         });
 

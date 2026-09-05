@@ -903,6 +903,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
             frost:current.glassFrost/100,
             rayAngle:current.vgpuRayAngle,
             rayStrength:current.vgpuRayStrength/100,
+            dispersion:0.35,
             background:scene.background,
           });
         }

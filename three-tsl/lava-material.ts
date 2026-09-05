@@ -27,9 +27,10 @@ type LavaMaterialExports = {
   perlin3: { position: Node };
 };
 
-const { blackbody, perlin3 } = tslExports<LavaMaterialExports>(lavaModule)(
+const { blackbody, perlin3, sampleDisplacementNormal } = tslExports<LavaMaterialExports & { sampleDisplacementNormal: { position: Node } }>(lavaModule)(
   "blackbody",
   "perlin3",
+  "sampleDisplacementNormal",
 );
 
 export interface LavaMaterialOptions {
@@ -234,7 +235,12 @@ export function createLavaMaterial(options: LavaMaterialOptions): LavaMaterial {
     .x.mul(0.9)
     .sub(0.4)
     .mul(0.12);
-  material.positionNode = positionLocal.add(normalLocal.mul(relief));
+  // Use a smooth normal from the displacement field gradient instead of the
+  // mesh normalLocal, which splits at hard edges (cap/side boundaries) and
+  // pulls the shell apart. The displacement field is continuous, so its
+  // gradient gives a watertight normal for displacement.
+  const dispNormal = sampleDisplacementNormal({ position: p });
+  material.positionNode = positionLocal.add(dispNormal.mul(relief));
 
   // Bump normals: the smooth plate/rope gradient finite-differences the
   // baked volume, then combines with the sharp tile's pre-baked derivatives.
