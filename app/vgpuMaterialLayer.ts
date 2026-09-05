@@ -4,53 +4,19 @@ import type * as THREE from "three";
 import { bakeLavaVolumes, type LavaFieldVolumes } from "../three-tsl/bake-lava";
 import { createLavaMaterial, type LavaMaterial } from "../three-tsl/lava-material";
 
-export type VgpuSceneMaterial = "VGPU Glass" | "VGPU Holographic" | "VGPU Lava";
+export type VgpuSceneMaterial = "VGPU Holographic" | "VGPU Lava";
 
 export type VgpuSceneOptions = {
   material: VgpuSceneMaterial;
   color: string;
   roughness: number;
-  transparency: number;
-  ior: number;
   reflection: number;
   frost: number;
-  rayAngle: number;
-  rayStrength: number;
-  showRay: boolean;
   light: number;
   ambientLight: number;
   lightPosition: [number, number, number];
   background: THREE.Scene["background"];
 };
-
-type BeamMesh = WEBGPU.Mesh<WEBGPU.PlaneGeometry, WEBGPU.MeshBasicMaterial>;
-
-function makeBeam(length: number, width: number, color: number, opacity: number): BeamMesh {
-  const geometry = new WEBGPU.PlaneGeometry(length, width);
-  geometry.translate(length / 2, 0, 0);
-  const material = new WEBGPU.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity,
-    blending: WEBGPU.AdditiveBlending,
-    depthWrite: false,
-    side: WEBGPU.DoubleSide,
-    toneMapped: false,
-  });
-  const mesh = new WEBGPU.Mesh(geometry, material);
-  mesh.renderOrder = -2;
-  return mesh;
-}
-
-function disposeBeam(group: WEBGPU.Group): void {
-  group.traverse((child) => {
-    if (child instanceof WEBGPU.Mesh) {
-      child.geometry.dispose();
-      (child.material as WEBGPU.Material).dispose();
-    }
-  });
-  group.clear();
-}
 
 function createHolographicMaterial(color: string, reflection: number, frost: number) {
   const tint = new WEBGPU.Color(color);
@@ -85,27 +51,6 @@ function createHolographicMaterial(color: string, reflection: number, frost: num
   return material;
 }
 
-function createGlassMaterial(options: VgpuSceneOptions) {
-  const frost = options.frost;
-  const reflection = options.reflection;
-  return new WEBGPU.MeshPhysicalNodeMaterial({
-    color: new WEBGPU.Color(options.color),
-    metalness: 0,
-    roughness: Math.max(0.008, frost * 0.74 + options.roughness * 0.08),
-    transmission: Math.max(0.08, options.transparency) * (1 - frost * 0.16),
-    thickness: 2.2,
-    ior: options.ior,
-    dispersion: Math.max(0.015, (options.ior - 1) * 0.16),
-    clearcoat: reflection,
-    clearcoatRoughness: 0.01 + frost * 0.42,
-    attenuationColor: new WEBGPU.Color(options.color),
-    attenuationDistance: 3.5 + frost * 2,
-    transparent: true,
-    opacity: 0.98,
-    side: WEBGPU.DoubleSide,
-  });
-}
-
 export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
   if (navigator.gpu === undefined) throw new Error("WebGPU is not available in this browser.");
 
@@ -126,8 +71,6 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
   mesh.castShadow = true;
   root.add(mesh);
 
-  const beamRoot = new WEBGPU.Group();
-  root.add(beamRoot);
   const ambient = new WEBGPU.HemisphereLight(0xffffff, 0x181818, 1.8);
   const key = new WEBGPU.DirectionalLight(0xffffff, 4.2);
   const fill = new WEBGPU.DirectionalLight(0xffffff, 2.8);
@@ -143,40 +86,9 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
   let activeMaterial: WEBGPU.Material = placeholder;
   let activeKind: VgpuSceneMaterial | null = null;
   let materialSignature = "";
-  let beamSignature = "";
   let volumes: LavaFieldVolumes | null = null;
   let lava: LavaMaterial | null = null;
   let lavaPromise: Promise<void> | null = null;
-
-  const rebuildBeam = (options: VgpuSceneOptions) => {
-    const signature = [options.showRay, options.rayStrength, options.rayAngle, options.ior, geometryRadius].join("/");
-    if (signature === beamSignature) return;
-    beamSignature = signature;
-    disposeBeam(beamRoot);
-    if (!options.showRay || options.rayStrength <= 0.001) return;
-    const radius = Math.max(1.2, geometryRadius * 1.08);
-    const inputLength = radius * 2.65;
-    const outputLength = radius * 2.25;
-    const strength = Math.max(0, Math.min(1, options.rayStrength));
-    const angle = WEBGPU.MathUtils.degToRad(options.rayAngle);
-    beamRoot.rotation.z = angle;
-    beamRoot.position.z = -0.08;
-
-    const input = makeBeam(inputLength, 0.025 + strength * 0.035, 0xffffff, 0.42 + strength * 0.52);
-    input.rotation.z = Math.PI;
-    input.position.x = radius;
-    beamRoot.add(input);
-
-    const colors = [0xff1744, 0xff7a00, 0xffec3d, 0x36ff76, 0x24dcff, 0x2878ff, 0x9d4dff];
-    const dispersion = (0.024 + Math.max(0, options.ior - 1) * 0.09) * (0.45 + strength * 0.75);
-    colors.forEach((color, index) => {
-      const offset = index - (colors.length - 1) / 2;
-      const ray = makeBeam(outputLength, 0.025 + strength * 0.04, color, 0.34 + strength * 0.46);
-      ray.position.x = radius;
-      ray.rotation.z = offset * dispersion;
-      beamRoot.add(ray);
-    });
-  };
 
   const ensureLava = () => {
     if (lava || lavaPromise) return;
@@ -187,6 +99,13 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
       }
       volumes = baked;
       lava = createLavaMaterial({ volumes: baked });
+      // The official demo uses smooth, welded primitives. Playtools extrusion
+      // deliberately duplicates vertices at hard cap/side edges; displacing
+      // those vertices along different face normals pulls the shell apart.
+      // Keep the complete procedural shading and bump pipeline, but leave the
+      // watertight user mesh positions intact.
+      lava.material.positionNode = null;
+      lava.material.side = WEBGPU.DoubleSide;
       lava.scale.value = Math.min(1.05, 1.8 / Math.max(1, geometryRadius));
       lava.glowIntensity.value = 1.75;
       if (activeKind === "VGPU Lava") {
@@ -202,7 +121,7 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
   };
 
   const updateMaterial = (options: VgpuSceneOptions) => {
-    const signature = [options.material, options.color, options.roughness, options.transparency, options.ior, options.reflection, options.frost].join("/");
+    const signature = [options.material, options.color, options.roughness, options.reflection, options.frost].join("/");
     if (signature === materialSignature) return;
     materialSignature = signature;
     activeKind = options.material;
@@ -213,9 +132,7 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
       activeMaterial = lava.material;
     } else {
       if (activeMaterial !== lava?.material) activeMaterial.dispose();
-      activeMaterial = options.material === "VGPU Holographic"
-        ? createHolographicMaterial(options.color, options.reflection, options.frost)
-        : createGlassMaterial(options);
+      activeMaterial = createHolographicMaterial(options.color, options.reflection, options.frost);
     }
     mesh.material = activeMaterial;
   };
@@ -229,7 +146,6 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
       if (lava) lava.scale.value = Math.min(1.05, 1.8 / Math.max(1, geometryRadius));
       previous.dispose();
       materialSignature = "";
-      beamSignature = "";
     },
     resize(width: number, height: number) {
       renderer.setSize(Math.max(1, width), Math.max(1, height), false);
@@ -259,7 +175,6 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
       fill.intensity = options.light / 30;
       ambient.intensity = options.ambientLight / 45;
       key.position.set(...options.lightPosition);
-      rebuildBeam(options);
 
       renderer.render(scene, camera);
       return true;
@@ -267,7 +182,6 @@ export async function createVgpuMaterialLayer(canvas: HTMLCanvasElement) {
     dispose() {
       if (disposed) return;
       disposed = true;
-      disposeBeam(beamRoot);
       mesh.geometry.dispose();
       activeMaterial.dispose();
       if (lava && activeMaterial !== lava.material) lava.material.dispose();
