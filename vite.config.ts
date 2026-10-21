@@ -1,3 +1,4 @@
+import { wgslVitePlugin } from "vgpu/client";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -9,7 +10,7 @@ export default defineConfig({
   define: {
     global: "globalThis",
   },
-  plugins: [react()],
+  plugins: [react(),wgslVitePlugin()],
   publicDir: "../public",
   build: {
     outDir: "../dist-pages",

@@ -2,6 +2,10 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
+import { applyColorGradient, type GradientSettings } from "./gradientMaterial";
+import type { VgpuEffects } from "./vgpuEffects";
+import { useTriplanarMaps } from "./triplanar";
+import { createShaderMaterial, shaderPresets, type ShaderPreset } from "./shaderMaterials";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
@@ -23,7 +27,7 @@ export type StageHandle = {
   exportTxt: (name: string) => void;
 };
 
-type StageProps = {
+type StageProps = GradientSettings & {
   source: string | null;
   fileName: string;
   text?: string;
@@ -69,6 +73,7 @@ type StageProps = {
   asciiGlyphs: string;
   effect: string;
   effectIntensity: number;
+  effectBlur: number;
   effectBackground: boolean;
   duotoneDarkColor: string;
   duotoneColor: string;
@@ -80,6 +85,11 @@ type StageProps = {
 };
 
 type Runtime = {
+  gpuEffects:VgpuEffects|null;
+  gpuTexture:THREE.CanvasTexture|null;
+  gpuRequested:boolean;
+  disposed:boolean;
+  exporting:boolean;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
@@ -101,14 +111,17 @@ type Runtime = {
   lastRotationEmit: number;
 };
 
-const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Glow:8};
+const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pixelate:4,Chromatic:5,Duotone:6,Dither:7,Thermal:9};
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
+    tGpuEffect:{value:null as THREE.Texture|null},
+    useGpu:{value:0},
     tBackground:{value:null},
     resolution:{value:new THREE.Vector2(1,1)},
     mode:{value:0},
     intensity:{value:1},
+    blur:{value:4},
     compositeBackground:{value:0},
     expandCellAlpha:{value:0},
     duotoneDarkColor:{value:new THREE.Color("#090c13")},
@@ -117,10 +130,13 @@ const postEffectShader={
   vertexShader:`varying vec2 vUv;
     void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`uniform sampler2D tDiffuse;
+    uniform sampler2D tGpuEffect;
+    uniform float useGpu;
     uniform sampler2D tBackground;
     uniform vec2 resolution;
     uniform float mode;
     uniform float intensity;
+    uniform float blur;
     uniform float compositeBackground;
     uniform float expandCellAlpha;
     uniform vec3 duotoneDarkColor;
@@ -140,6 +156,13 @@ const postEffectShader={
       float gx=-tl-2.0*ml-bl+tr+2.0*mr+br;
       float gy=tl+2.0*tc+tr-bl-2.0*bc-br;
       return length(vec2(gx,gy));
+    }
+    vec4 blurred(vec2 uv){
+      vec2 stepUv=vec2(blur)/max(resolution,vec2(1.0));
+      vec4 color=texture2D(tDiffuse,uv)*.25;
+      color+=(texture2D(tDiffuse,uv+vec2(stepUv.x,0.0))+texture2D(tDiffuse,uv-vec2(stepUv.x,0.0))+texture2D(tDiffuse,uv+vec2(0.0,stepUv.y))+texture2D(tDiffuse,uv-vec2(0.0,stepUv.y)))*.125;
+      color+=(texture2D(tDiffuse,uv+stepUv*.7071)+texture2D(tDiffuse,uv-stepUv*.7071)+texture2D(tDiffuse,uv+vec2(stepUv.x,-stepUv.y)*.7071)+texture2D(tDiffuse,uv+vec2(-stepUv.x,stepUv.y)*.7071))*.0625;
+      return color;
     }
     void main(){
       vec4 base=texture2D(tDiffuse,vUv);
@@ -176,7 +199,7 @@ const postEffectShader={
         outputAlpha=mix(base.a,pixel.a,expandCellAlpha);
       }else if(mode>4.5&&mode<5.5){
         vec2 offset=vec2(1.0,0.35)/max(resolution,vec2(1.0))*amount*12.0;
-        vec3 split=vec3(texture2D(tDiffuse,vUv+offset).r,base.g,texture2D(tDiffuse,vUv-offset).b);
+        vec3 split=vec3(blurred(vUv+offset).r,blurred(vUv).g,blurred(vUv-offset).b);
         result=mix(base.rgb,split,amount);
       }else if(mode>5.5&&mode<6.5){
         float lightness=luma(base.rgb);
@@ -188,11 +211,17 @@ const postEffectShader={
         float threshold=fract(index*.61803398875);
         float value=step(threshold,mix(luma(base.rgb),dot(base.rgb,vec3(.333)),amount));
         result=mix(base.rgb,vec3(value),amount);
-      }else if(mode>7.5){
-        vec2 t=1.0/max(resolution,vec2(1.0))*mix(2.0,8.0,amount);
-        vec3 glow=texture2D(tDiffuse,vUv+vec2(t.x,0.0)).rgb+texture2D(tDiffuse,vUv-vec2(t.x,0.0)).rgb+texture2D(tDiffuse,vUv+vec2(0.0,t.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.0,t.y)).rgb;
-        result=base.rgb+glow*.12*amount;
+
       }
+      if(mode>8.5&&mode<9.5){
+        float v=clamp(luma(base.rgb),0.0,1.0);
+        vec3 cold=mix(vec3(.015,0.0,.06),vec3(.18,.02,.65),smoothstep(0.0,.25,v));
+        vec3 warm=mix(cold,vec3(1.0,.04,.005),smoothstep(.2,.55,v));
+        vec3 hot=mix(warm,vec3(1.0,.85,.02),smoothstep(.5,.8,v));
+        result=mix(base.rgb,mix(hot,vec3(1.0),smoothstep(.8,1.0,v)),amount);
+      }
+      if(mode>8.5&&luma(base.rgb)<.00001)result=base.rgb;
+      if(useGpu>.5)result=texture2D(tGpuEffect,vUv).rgb;
       vec4 outputColor=vec4(result,outputAlpha);
       if(compositeBackground>.5){
         vec4 background=texture2D(tBackground,vUv);
@@ -202,9 +231,34 @@ const postEffectShader={
     }`,
 };
 
+function renderEffectComposer(runtime:Runtime,props:StageProps){
+  runtime.effectPass.uniforms.useGpu.value=0;
+  runtime.renderer.domElement.dataset.effectBackend="webgl";
+  if((effectModes[props.effect]??0)>=9){
+    if(!runtime.gpuRequested){
+      runtime.gpuRequested=true;
+      void import("./vgpuEffects").then(module=>module.createVgpuEffects()).then(bridge=>{
+        if(runtime.disposed){bridge?.dispose();return;}
+        runtime.gpuEffects=bridge;
+        if(bridge){runtime.gpuTexture=new THREE.CanvasTexture(bridge.canvas);runtime.gpuTexture.colorSpace=THREE.NoColorSpace;runtime.gpuTexture.generateMipmaps=false;runtime.gpuTexture.minFilter=THREE.LinearFilter;runtime.effectPass.uniforms.tGpuEffect.value=runtime.gpuTexture;}
+      }).catch(error=>{if(import.meta.env.DEV)console.warn("WebGPU effects unavailable; using WebGL",error);});
+    }
+    if(runtime.gpuEffects){
+      runtime.renderer.render(runtime.scene,runtime.camera);
+      if(runtime.gpuEffects.render(runtime.renderer.domElement,effectModes[props.effect],props.effectIntensity/100)){
+        runtime.gpuTexture!.needsUpdate=true;
+        runtime.effectPass.uniforms.useGpu.value=1;
+        runtime.renderer.domElement.dataset.effectBackend="vgpu";
+      }
+    }
+  }
+  runtime.composer.render();
+}
+
 function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true){
   runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
   runtime.effectPass.uniforms.intensity.value=props.effectIntensity/100;
+  runtime.effectPass.uniforms.blur.value=props.effectBlur;
   runtime.effectPass.uniforms.duotoneDarkColor.value.set(props.duotoneDarkColor);
   runtime.effectPass.uniforms.duotoneColor.value.set(props.duotoneColor);
   runtime.effectPass.uniforms.resolution.value.set(runtime.renderer.domElement.width,runtime.renderer.domElement.height);
@@ -223,12 +277,12 @@ function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=tr
       runtime.effectPass.uniforms.compositeBackground.value=1;
     }else runtime.effectPass.uniforms.compositeBackground.value=0;
     runtime.scene.background=null;runtime.model.visible=modelVisible;runtime.shadowFloor.visible=floorVisible;
-    runtime.composer.render();
+    renderEffectComposer(runtime,props);
     runtime.scene.background=background;
     return;
   }
   runtime.effectPass.uniforms.compositeBackground.value=0;
-  runtime.composer.render();
+  renderEffectComposer(runtime,props);
 }
 
 const defaultAsciiRamp = " .,:;irsXA253hMHGS#9B&@";
@@ -589,15 +643,15 @@ function loadTexture(url: string, color = false) {
   return texture;
 }
 
-function makeMaterial(kind: string, color: string, roughness: number, repeat: number, rotation: number, tint: number, normalStrength: number, colorOpacity: number, glassIor: number, glassTransparency: number, customMaterialUrl?:string) {
+function makeMaterial(kind: string, color: string, roughness: number, repeat: number, rotation: number, tint: number, normalStrength: number, colorOpacity: number, glassIor: number, glassTransparency: number, customMaterialUrl?:string, objectDepth=1,triplanar=false,bounds?:THREE.Box3,appearance?:GradientSettings) {
   const value = new THREE.Color(color);
   const r = roughness / 100;
   const alpha=colorOpacity/100;
   let result: THREE.Material;
-  if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.015,r*.28), metalness:0, transmission:glassTransparency/100, thickness:1.8, ior:glassIor, dispersion:.035, transparent:true, opacity:alpha, clearcoat:1, clearcoatRoughness:.025, envMapIntensity:1.8, attenuationColor:value, attenuationDistance:3.5 });
+  if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.012,r*.2), metalness:0, transmission:glassTransparency/100*.92, thickness:Math.max(.001,objectDepth), ior:glassIor, dispersion:.015, transparent:alpha<1, opacity:alpha, clearcoat:.25, clearcoatRoughness:.04, envMapIntensity:1.25, attenuationColor:value, attenuationDistance:2, side:THREE.DoubleSide });
   else if (kind === "Metal") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.12,r), metalness:.88 });
   else if (kind === "Chrome") result = new THREE.MeshPhysicalMaterial({ color:new THREE.Color("#f3f5f7"), roughness:Math.max(.025,r*.22), metalness:1, clearcoat:1, clearcoatRoughness:.02, envMapIntensity:2.8 });
-  else if (kind === "ASCII") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.16,r), metalness:.08 });
+  else if (shaderPresets.includes(kind as ShaderPreset)) result = createShaderMaterial(kind as ShaderPreset,value,Math.max(.06,r));
   else if (customMaterialUrl) {
     const map=loadTexture(customMaterialUrl,true);
     map.repeat.set(repeat,repeat);map.center.set(.5,.5);map.rotation=THREE.MathUtils.degToRad(rotation);map.needsUpdate=true;
@@ -607,19 +661,21 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
   else if (textureAssets[kind]) {
     const [diffuseUrl, normalUrl, roughnessUrl] = textureAssets[kind];
     const map = loadTexture(diffuseUrl, true);
-    const normalMap = loadTexture(normalUrl);
+    const normalMap = normalStrength>0?loadTexture(normalUrl):undefined;
     const roughnessMap=roughnessUrl?loadTexture(roughnessUrl):undefined;
     const effectiveRepeat=kind==="Rubber"?repeat*.5:repeat;
     [map, normalMap, roughnessMap].filter(Boolean).forEach((texture) => { texture!.repeat.set(effectiveRepeat, effectiveRepeat); texture!.center.set(.5, .5); texture!.rotation = THREE.MathUtils.degToRad(rotation); texture!.needsUpdate = true; });
     const textureRoughness = kind === "Marble" ? .34 : kind === "Leather" ? .58 : kind === "Rubber" ? .9 : .78;
     const textureColor = new THREE.Color("#ffffff").lerp(value, tint / 100);
     const normalScale=Math.max(0,normalStrength/100)*(kind==="Rubber"?1.2:1);
-    result = new THREE.MeshStandardMaterial({ color:textureColor, map, normalMap, roughnessMap, normalScale:new THREE.Vector2(normalScale,normalScale), roughness:Math.max(textureRoughness,r), metalness:0 });
+    result = new THREE.MeshStandardMaterial({ color:textureColor, map, normalMap:normalMap??null, roughnessMap:roughnessMap??null, normalScale:new THREE.Vector2(normalScale,normalScale), roughness:Math.max(textureRoughness,r), metalness:0 });
   }
   else if (kind === "Clay") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.82,r), metalness:0 });
   else result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.06,r*.7), metalness:.04, clearcoat:1, clearcoatRoughness:.08 });
   if(kind!=="Glass"){result.opacity=alpha;result.transparent=alpha<.999;result.depthWrite=alpha>.96;}
-  result.side = THREE.DoubleSide;
+  if(kind!=="Glass")result.side = THREE.DoubleSide;
+  if(triplanar&&result instanceof THREE.MeshStandardMaterial&&result.map)useTriplanarMaps(result);
+  if(bounds&&appearance)applyColorGradient(result,bounds,color,appearance);
   result.shadowSide = THREE.DoubleSide;
   return result;
 }
@@ -662,10 +718,11 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const host = runtime.renderer.domElement.parentElement!;
       const { width, height } = host.getBoundingClientRect();
       const oldBackground=runtime.scene.background;
+      runtime.exporting=true;
       runtime.renderer.setSize(1400, 1400, false);
       runtime.camera.aspect = 1;
       runtime.camera.updateProjectionMatrix();
-      const ascii=latestPropsRef.current.material==="ASCII";
+      const ascii=latestPropsRef.current.effect==="ASCII";
       const output=ascii?document.createElement("canvas"):runtime.renderer.domElement;
       if(ascii){const current=latestPropsRef.current;renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",current.asciiGlyphs,output,current.asciiCharacters);}
       else{
@@ -685,6 +742,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         runtime.camera.aspect = width / Math.max(1, height);
         runtime.camera.updateProjectionMatrix();
         runtime.scene.background=oldBackground;
+        runtime.exporting=false;
       }, "image/png");
     },
     exportObj(name) {
@@ -751,7 +809,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { gpuEffects:null,gpuTexture:null,gpuRequested:false,disposed:false,exporting:false,scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
@@ -770,7 +828,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       if(event.data.error)return;
       const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(event.data.position,3));geometry.setAttribute("normal",new THREE.BufferAttribute(event.data.normal,3));if(event.data.uv.length)geometry.setAttribute("uv",new THREE.BufferAttribute(event.data.uv,2));geometry.computeBoundingBox();geometry.computeBoundingSphere();
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
-      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl));mesh.castShadow=true;mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
+      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
     };
     const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
@@ -779,8 +837,10 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       controls.update();
       const runtime=runtimeRef.current;
       if(!runtime)return;
+      if(runtime.exporting){frame=requestAnimationFrame(loop);return;}
+      model.traverse(child=>{if(child instanceof THREE.Mesh){const material=child.material as THREE.Material;if(material.userData.patternTime)material.userData.patternTime.value=time/1000;}});
       if(runtime.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
-      if(latestPropsRef.current.material==="ASCII"){
+      if(latestPropsRef.current.effect==="ASCII"){
         renderer.domElement.style.opacity="0";
         asciiCanvas.style.display="block";
         if(time-runtime.asciiLastFrame>42){
@@ -798,7 +858,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { const runtime=runtimeRef.current;if(runtime){runtime.disposed=true;runtime.gpuEffects?.dispose();runtime.gpuTexture?.dispose();}cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -820,8 +880,9 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       // SVGLoader samples every curve separately, so a nominal value of 256
       // can otherwise create thousands of contour points per ring. Preserve
       // the requested visual detail while bounding the actual ring density.
-      const ringLimit=Math.min(1024,Math.max(48,48+shapeSegments));
-      const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(Math.max(3,shapeSegments)),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(Math.max(3,shapeSegments)),ringLimit).map(point=>[point.x,point.y]))}));
+      const curveSegments=shapeGeometryMode==="Inflate"?Math.max(shapeSegments,64+shapeSurfaceDetail*32):Math.max(3,shapeSegments);
+      const ringLimit=Math.min(1024,Math.max(48,shapeGeometryMode==="Inflate"?curveSegments*4:48+shapeSegments));
+      const sampled=shapes.map(shape=>({outer:limitRing(shape.getPoints(curveSegments),ringLimit).map(point=>[point.x,point.y]),holes:shape.holes.map(hole=>limitRing(hole.getPoints(curveSegments),ringLimit).map(point=>[point.x,point.y]))}));
       runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,revolveAngle:shapeRevolveAngle,revolveEdge:shapeRevolveEdge,inflateAmount:shapeInflateAmount,inflateDirection:shapeInflateDirection,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
     };
     build(); return () => { cancelled = true; };
@@ -829,16 +890,17 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
-    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl); old.dispose(); } });
-  }, [props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
+    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props); old.dispose(); } });
+  }, [props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);
 
   useEffect(() => {
     const runtime=runtimeRef.current; if(!runtime)return;
-    const old=runtime.scene.background; runtime.scene.background=presetBackground(props.background);
+    const old=runtime.scene.background; // Transmission needs an opaque scene background; CSS behind the canvas cannot refract.
+    runtime.scene.background=presetBackground(props.background)??(props.material==="Glass"?new THREE.Color("#080808"):null);
     if(old instanceof THREE.Texture && !Array.from(textureCache.values()).includes(old)) old.dispose();
-  },[props.background]);
+  },[props.background,props.material]);
 
   return <div ref={hostRef} className="webgl-stage" aria-label="Interactive WebGL 3D model" />;
 });
