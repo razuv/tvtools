@@ -3,7 +3,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { applyColorGradient, type GradientSettings } from "./gradientMaterial";
-import type { VgpuEffects } from "./vgpuEffects";
 import { useTriplanarMaps } from "./triplanar";
 import { createShaderMaterial, shaderPresets, type ShaderPreset } from "./shaderMaterials";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -85,10 +84,6 @@ type StageProps = GradientSettings & {
 };
 
 type Runtime = {
-  gpuEffects:VgpuEffects|null;
-  gpuTexture:THREE.CanvasTexture|null;
-  gpuRequested:boolean;
-  disposed:boolean;
   exporting:boolean;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
@@ -115,8 +110,6 @@ const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pi
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
-    tGpuEffect:{value:null as THREE.Texture|null},
-    useGpu:{value:0},
     tBackground:{value:null},
     resolution:{value:new THREE.Vector2(1,1)},
     mode:{value:0},
@@ -130,8 +123,6 @@ const postEffectShader={
   vertexShader:`varying vec2 vUv;
     void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`uniform sampler2D tDiffuse;
-    uniform sampler2D tGpuEffect;
-    uniform float useGpu;
     uniform sampler2D tBackground;
     uniform vec2 resolution;
     uniform float mode;
@@ -221,7 +212,6 @@ const postEffectShader={
         result=mix(base.rgb,mix(hot,vec3(1.0),smoothstep(.8,1.0,v)),amount);
       }
       if(mode>8.5&&luma(base.rgb)<.00001)result=base.rgb;
-      if(useGpu>.5)result=texture2D(tGpuEffect,vUv).rgb;
       vec4 outputColor=vec4(result,outputAlpha);
       if(compositeBackground>.5){
         vec4 background=texture2D(tBackground,vUv);
@@ -230,30 +220,6 @@ const postEffectShader={
       gl_FragColor=outputColor;
     }`,
 };
-
-function renderEffectComposer(runtime:Runtime,props:StageProps){
-  runtime.effectPass.uniforms.useGpu.value=0;
-  runtime.renderer.domElement.dataset.effectBackend="webgl";
-  if((effectModes[props.effect]??0)>=9){
-    if(!runtime.gpuRequested){
-      runtime.gpuRequested=true;
-      void import("./vgpuEffects").then(module=>module.createVgpuEffects()).then(bridge=>{
-        if(runtime.disposed){bridge?.dispose();return;}
-        runtime.gpuEffects=bridge;
-        if(bridge){runtime.gpuTexture=new THREE.CanvasTexture(bridge.canvas);runtime.gpuTexture.colorSpace=THREE.NoColorSpace;runtime.gpuTexture.generateMipmaps=false;runtime.gpuTexture.minFilter=THREE.LinearFilter;runtime.effectPass.uniforms.tGpuEffect.value=runtime.gpuTexture;}
-      }).catch(error=>{if(import.meta.env.DEV)console.warn("WebGPU effects unavailable; using WebGL",error);});
-    }
-    if(runtime.gpuEffects){
-      runtime.renderer.render(runtime.scene,runtime.camera);
-      if(runtime.gpuEffects.render(runtime.renderer.domElement,effectModes[props.effect],props.effectIntensity/100)){
-        runtime.gpuTexture!.needsUpdate=true;
-        runtime.effectPass.uniforms.useGpu.value=1;
-        runtime.renderer.domElement.dataset.effectBackend="vgpu";
-      }
-    }
-  }
-  runtime.composer.render();
-}
 
 function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=true){
   runtime.effectPass.uniforms.mode.value=effectModes[props.effect]??0;
@@ -277,12 +243,12 @@ function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=tr
       runtime.effectPass.uniforms.compositeBackground.value=1;
     }else runtime.effectPass.uniforms.compositeBackground.value=0;
     runtime.scene.background=null;runtime.model.visible=modelVisible;runtime.shadowFloor.visible=floorVisible;
-    renderEffectComposer(runtime,props);
+    runtime.composer.render();
     runtime.scene.background=background;
     return;
   }
   runtime.effectPass.uniforms.compositeBackground.value=0;
-  renderEffectComposer(runtime,props);
+  runtime.composer.render();
 }
 
 const defaultAsciiRamp = " .,:;irsXA253hMHGS#9B&@";
@@ -809,7 +775,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { gpuEffects:null,gpuTexture:null,gpuRequested:false,disposed:false,exporting:false,scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { exporting:false,scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
@@ -858,7 +824,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { const runtime=runtimeRef.current;if(runtime){runtime.disposed=true;runtime.gpuEffects?.dispose();runtime.gpuTexture?.dispose();}cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(() => {

@@ -78,19 +78,9 @@ const ru:Record<string,string>={
   "All parameters reset":"Все параметры сброшены","Background uploaded":"Фон загружен","Background removed":"Фон удалён","Copy parameters first":"Сначала скопируйте параметры","Could not cache the shape library":"Не удалось сохранить библиотеку фигур","Could not read this JPG":"Не удалось прочитать JPG","Could not read this font":"Не удалось прочитать шрифт","Embed code copied":"Embed-код скопирован","Enter some text first":"Сначала введите текст","File is larger than 12 MB":"Файл больше 12 МБ","Font is larger than 12 MB":"Шрифт больше 12 МБ","TTF and OTF files only":"Поддерживаются только TTF и OTF","Font added":"Шрифт добавлен","JPG materials only":"Поддерживаются только JPG-материалы","Material is larger than 8 MB":"Материал больше 8 МБ","Parameters copied":"Параметры скопированы","Parameters pasted":"Параметры вставлены","SVG and PNG files only":"Поддерживаются только SVG и PNG","Shape added to the library":"Фигура добавлена в библиотеку","Shape pasted from Figma":"Фигура вставлена из Figma","Clipboard does not contain SVG or PNG":"В буфере обмена нет SVG или PNG","Clipboard access denied":"Нет доступа к буферу обмена","Use Command or Control V to paste from Figma":"Используйте ⌘/Ctrl+V для вставки из Figma","Shape removed from the library":"Фигура удалена из библиотеки","Text shape added to the library":"Текстовая фигура добавлена в библиотеку","Transparent PNG exported":"Прозрачный PNG экспортирован","PNG with background exported":"PNG с фоном экспортирован","ASCII text exported":"ASCII-текст экспортирован","OBJ geometry exported":"OBJ-геометрия экспортирована"
 };
 
-const materials: { name: BuiltInMaterial; note: string }[] = [
-  { name: "Gloss", note: "High shine" },
-  { name: "Metal", note: "Brushed" },
-  { name: "Glass", note: "Clear" },
-  { name: "Wood", note: "CC0 texture" },
-  { name: "Stone", note: "CC0 texture" },
-  { name: "Marble", note: "CC0 texture" },
-  { name: "Leather", note: "CC0 texture" },
-  { name: "Concrete", note: "CC0 texture" },
-  { name: "Rubber", note: "CC0 texture" },
-  { name: "Clay", note: "Soft matte" },
-  { name: "Chrome", note: "Mirror" },
-  ...shaderPresets.map(name=>({name,note:"Procedural"})),
+const materials: BuiltInMaterial[] = [
+  "Gloss", "Metal", "Glass", "Wood", "Stone", "Marble", "Leather",
+  "Concrete", "Rubber", "Clay", "Chrome", ...shaderPresets,
 ];
 
 const initialPalette = ["#E0E0E0", "#FF5C35", "#6C5CE7", "#F4F1E9", "#2878FF"];
@@ -701,7 +691,7 @@ function Home() {
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Material")}</span><button onClick={(e)=>{e.preventDefault();resetMaterial();}} aria-label="Reset material"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
             <div className="section-body">
               <div className="control-row"><span>{t("Surface")}</span><output>{activeCustomMaterial?.name??t(material)}</output></div>
-              <div className="materials">{materials.map((item) => <button key={item.name} className={material === item.name ? "active" : ""} onClick={() => setMaterial(item.name)}><span className={`material-ball ${item.name.toLowerCase()}`} /><b>{t(item.name)}</b><small>{t(item.note)}</small></button>)}{customMaterials.map(item=><button key={item.id} className={material===`Custom:${item.id}`?"active":""} onClick={()=>setMaterial(`Custom:${item.id}`)}><span className="material-ball custom-jpg" style={{backgroundImage:`url(${item.source})`}}/><b>{item.name}</b><small>{item.width}×{item.height} JPG</small></button>)}</div>
+              <div className="materials">{materials.map((item) => <button key={item} className={material === item ? "active" : ""} onClick={() => setMaterial(item)}><span className={`material-ball ${item.toLowerCase()}`} /><b>{t(item)}</b></button>)}{customMaterials.map(item=><button key={item.id} className={material===`Custom:${item.id}`?"active":""} onClick={()=>setMaterial(`Custom:${item.id}`)}><span className="material-ball custom-jpg" style={{backgroundImage:`url(${item.source})`}}/><b>{item.name}</b></button>)}</div>
               <button className="material-drop" onClick={()=>materialRef.current?.click()} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();void importMaterial(event.dataTransfer.files[0]);}}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/></span><strong>{t("Drop JPG material")}</strong><small>{t("Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB")}</small></button>
               <input ref={materialRef} className="file-input" type="file" accept=".jpg,.jpeg,image/jpeg" onChange={event=>void importMaterial(event.target.files?.[0])}/>
               {isTexturedMaterial && <div className="texture-controls">
