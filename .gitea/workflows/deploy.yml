@@ -1,0 +1,25 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: friendly
+    steps:
+      - name: Pull, install and build
+        run: |
+          set -euo pipefail
+          cd /home/friendly/repo/tvtools
+          git pull --ff-only
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm use default
+          npm install
+          npm run build
