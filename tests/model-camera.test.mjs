@@ -42,9 +42,9 @@ test("camera zoom keeps the viewing direction and focal length changes perspecti
   setCameraView(camera,target,"focalLength",500);assert.ok(Math.abs(camera.getFocalLength()-200)<1e-10);
 });
 
-test("bundled Utah Teapot loads with real depth",()=>{
-  const data=readFileSync(new URL("../public/models/teapot.obj",import.meta.url));
-  const geometry=parseModel(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),"teapot.obj");
+test("bundled Cat Base Mesh loads with real depth",()=>{
+  const data=readFileSync(new URL("../public/models/cat.obj",import.meta.url));
+  const geometry=parseModel(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),"cat.obj");
   assert.ok(geometry.getAttribute("position").count>1000);
   assert.ok(geometry.boundingBox.getSize(new THREE.Vector3()).z>.5);
   geometry.dispose();

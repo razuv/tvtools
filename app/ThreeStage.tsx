@@ -2,6 +2,8 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
+import { addEffectPipeline } from "./backgroundComposite";
+import { addFurShells, removeFurShells } from "./furMaterial";
 import { ModelPhysics } from "./gravity";
 import { backgroundPresets, paintBackgroundFill, type BackgroundFill } from "./backgroundFill";
 import { parseModel } from "./modelImport";
@@ -14,8 +16,6 @@ import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js";
 import { EndType, FillRule, inflatePathsD, JoinType, simplifyPathD, unionD, type PathD } from "clipper2-ts";
@@ -33,6 +33,8 @@ export type StageHandle = {
 
 type StageProps = GradientSettings & {
   gravity?:boolean;
+  furLength?:number;
+  furDensity?:number;
   backgroundFill?:BackgroundFill;
   source: string | null;
   fileName: string;
@@ -98,6 +100,7 @@ type Runtime = {
   renderer: THREE.WebGLRenderer;
   composer: EffectComposer;
   effectPass: ShaderPass;
+  compositePass:ShaderPass;
   backgroundTarget: THREE.WebGLRenderTarget;
   controls: OrbitControls;
   model: THREE.Group;
@@ -118,12 +121,10 @@ const effectModes:Record<string,number>={None:0,Cartoon:1,Sketch:2,Halftone:3,Pi
 const postEffectShader={
   uniforms:{
     tDiffuse:{value:null},
-    tBackground:{value:null},
     resolution:{value:new THREE.Vector2(1,1)},
     mode:{value:0},
     intensity:{value:1},
     blur:{value:4},
-    compositeBackground:{value:0},
     expandCellAlpha:{value:0},
     duotoneDarkColor:{value:new THREE.Color("#090c13")},
     duotoneColor:{value:new THREE.Color("#ff7a45")},
@@ -131,12 +132,10 @@ const postEffectShader={
   vertexShader:`varying vec2 vUv;
     void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`uniform sampler2D tDiffuse;
-    uniform sampler2D tBackground;
     uniform vec2 resolution;
     uniform float mode;
     uniform float intensity;
     uniform float blur;
-    uniform float compositeBackground;
     uniform float expandCellAlpha;
     uniform vec3 duotoneDarkColor;
     uniform vec3 duotoneColor;
@@ -221,10 +220,7 @@ const postEffectShader={
       }
       if(mode>8.5&&luma(base.rgb)<.00001)result=base.rgb;
       vec4 outputColor=vec4(result,outputAlpha);
-      if(compositeBackground>.5){
-        vec4 background=texture2D(tBackground,vUv);
-        outputColor=vec4(outputColor.rgb*outputColor.a+background.rgb*(1.0-outputColor.a),outputColor.a+background.a*(1.0-outputColor.a));
-      }
+
       gl_FragColor=outputColor;
     }`,
 };
@@ -238,6 +234,7 @@ function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=tr
   runtime.effectPass.uniforms.resolution.value.set(runtime.renderer.domElement.width,runtime.renderer.domElement.height);
   const isolateModel=!includeBackground||!props.effectBackground;
   runtime.effectPass.uniforms.expandCellAlpha.value=isolateModel?1:0;
+  runtime.compositePass.enabled=isolateModel&&includeBackground;
   if(isolateModel){
     const background=runtime.scene.background;
     const modelVisible=runtime.model.visible;
@@ -247,15 +244,13 @@ function renderWithEffects(runtime:Runtime,props:StageProps,includeBackground=tr
       runtime.renderer.setRenderTarget(runtime.backgroundTarget);
       runtime.renderer.clear();runtime.renderer.render(runtime.scene,runtime.camera);
       runtime.renderer.setRenderTarget(null);
-      runtime.effectPass.uniforms.tBackground.value=runtime.backgroundTarget.texture;
-      runtime.effectPass.uniforms.compositeBackground.value=1;
-    }else runtime.effectPass.uniforms.compositeBackground.value=0;
+      runtime.compositePass.uniforms.tBackground.value=runtime.backgroundTarget.texture;
+    }
     runtime.scene.background=null;runtime.model.visible=modelVisible;runtime.shadowFloor.visible=floorVisible;
     runtime.composer.render();
     runtime.scene.background=background;
     return;
   }
-  runtime.effectPass.uniforms.compositeBackground.value=0;
   runtime.composer.render();
 }
 
@@ -622,7 +617,8 @@ function makeMaterial(kind: string, color: string, roughness: number, repeat: nu
   const r = roughness / 100;
   const alpha=colorOpacity/100;
   let result: THREE.Material;
-  if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.012,r*.2), metalness:0, transmission:glassTransparency/100*.92, thickness:Math.max(.001,objectDepth), ior:glassIor, dispersion:.015, transparent:alpha<1, opacity:alpha, clearcoat:.25, clearcoatRoughness:.04, envMapIntensity:1.25, attenuationColor:value, attenuationDistance:2, side:THREE.DoubleSide });
+  if(kind==="Fur")result=new THREE.MeshStandardMaterial({color:value,roughness:.95,metalness:0});
+  else if (kind === "Glass") result = new THREE.MeshPhysicalMaterial({ color:value, roughness:Math.max(.012,r*.2), metalness:0, transmission:glassTransparency/100*.92, thickness:Math.max(.001,objectDepth), ior:glassIor, dispersion:.015, transparent:alpha<1, opacity:alpha, clearcoat:.25, clearcoatRoughness:.04, envMapIntensity:1.25, attenuationColor:value, attenuationDistance:2, side:THREE.DoubleSide });
   else if (kind === "Metal") result = new THREE.MeshStandardMaterial({ color:value, roughness:Math.max(.12,r), metalness:.88 });
   else if (kind === "Chrome") result = new THREE.MeshPhysicalMaterial({ color:new THREE.Color("#f3f5f7"), roughness:Math.max(.025,r*.22), metalness:1, clearcoat:1, clearcoatRoughness:.02, envMapIntensity:2.8 });
   else if (shaderPresets.includes(kind as ShaderPreset)) result = createShaderMaterial(kind as ShaderPreset,value,Math.max(.06,r));
@@ -666,8 +662,8 @@ function presetBackground(name: string,fill?:BackgroundFill) {
 }
 
 function installGeometry(runtime:Runtime,geometry:THREE.BufferGeometry,current:StageProps) {
-      runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
-      const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(geometry.getAttribute("position").count/3));
+      runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();if(child instanceof THREE.InstancedMesh)child.dispose();}});runtime.model.clear();
+      const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);if(current.material==="Fur")addFurShells(mesh,current.color,current.colorOpacity/100,current.furLength??35,current.furDensity??120,current);current.onReady?.(Math.round(geometry.getAttribute("position").count/3));
 }
 
 export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStage(props, ref) {
@@ -732,7 +728,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
     exportObj(name) {
       const runtime = runtimeRef.current; if (!runtime) return;
-      const text = new OBJExporter().parse(runtime.model);
+      const exportModel=runtime.model.clone();exportModel.traverse(child=>{if(child.userData.furShell)child.removeFromParent();});
+      const text = new OBJExporter().parse(exportModel);
       downloadBlob(new Blob([text], { type:"text/plain" }), `${name}.obj`);
     },
     exportTxt(name) {
@@ -761,11 +758,9 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     renderer.shadowMap.type = THREE.PCFShadowMap;
     const composer=new EffectComposer(renderer);
     composer.setPixelRatio(renderer.getPixelRatio());
-    composer.addPass(new RenderPass(scene,camera));
     const effectPass=new ShaderPass(postEffectShader);
-    composer.addPass(effectPass);
-    composer.addPass(new OutputPass());
-    const backgroundTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat});
+    const compositePass=addEffectPipeline(composer,scene,camera,effectPass);
+    const backgroundTarget=new THREE.WebGLRenderTarget(1,1,{format:THREE.RGBAFormat,type:THREE.HalfFloatType});
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
     pmrem.dispose();
@@ -795,7 +790,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { exporting:false,scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { exporting:false,scene, camera, renderer, composer, effectPass, compositePass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0,grabbed=false;
     const grabLocal=new THREE.Vector3(),grabScreen=new THREE.Vector3();
     const tether=tetherRef.current!,tetherLine=tether.querySelector("line")!,tetherCircle=tether.querySelector("circle")!;
@@ -881,7 +876,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       frame=requestAnimationFrame(loop);
     };
     loop();
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("lostpointercapture",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
+    return () => { cancelAnimationFrame(frame);model.children.forEach(child=>{if(child instanceof THREE.Mesh)removeFurShells(child);}); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("lostpointercapture",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
   useEffect(()=>{
@@ -932,8 +927,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
-    runtime.model.traverse((child) => { if (child instanceof THREE.Mesh) { const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props); old.dispose(); } });
-  }, [props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
+    runtime.model.children.forEach((child) => { if (child instanceof THREE.Mesh) { removeFurShells(child);const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props);if(props.material==="Fur")addFurShells(child,props.color,props.colorOpacity/100,props.furLength??35,props.furDensity??120,props); old.dispose(); } });
+  }, [props.furLength,props.furDensity,props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);
 

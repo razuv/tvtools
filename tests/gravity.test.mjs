@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { ModelPhysics } from "../app/gravity.ts";
+import { readFileSync } from "node:fs";
+import { parseModel } from "../app/modelImport.ts";
 
 function fixture(){const geometry=new THREE.BoxGeometry(1,1,1),model=new THREE.Group();model.position.y=2;return {geometry,model,physics:new ModelPhysics(geometry,model,-1)};}
 test("rigid bodies land, bounce and sleep without falling through the floor",()=>{
@@ -30,4 +32,22 @@ test("tilted bodies settle with contacts based on their shape",()=>{
   const box=new THREE.Box3().setFromObject(model);
   assert.ok(Number.isFinite(model.position.y));assert.ok(physics.body.velocity.length()<.1);
   assert.ok(physics.body.angularVelocity.length()<.1);assert.ok(Math.abs(box.min.y+1)<.03);geometry.dispose();
+});
+
+test("the complete cat stays above the shadow floor through impacts and rotation",()=>{
+  const data=readFileSync(new URL("../public/models/cat.obj",import.meta.url));
+  const geometry=parseModel(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),"cat.obj");
+  const positions=geometry.getAttribute("position"),floorY=-1.72;
+  for(const angle of [.3,.8,1.3]){
+    const model=new THREE.Group();model.position.y=2;model.rotation.set(angle,.6,.4);
+    const physics=new ModelPhysics(geometry,model,floorY);
+    for(let frame=0;frame<600;frame++){
+      physics.step(1/120);
+      const up=new THREE.Vector3(0,1,0).applyQuaternion(model.quaternion.clone().invert());
+      let bottom=Infinity;
+      for(let i=0;i<positions.count;i++)bottom=Math.min(bottom,positions.getX(i)*up.x+positions.getY(i)*up.y+positions.getZ(i)*up.z+model.position.y);
+      assert.ok(bottom>=floorY-1e-6,`cat penetrated the shadow floor: ${bottom}`);
+    }
+  }
+  geometry.dispose();
 });
