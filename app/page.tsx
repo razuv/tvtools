@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
+import { Copy01Icon, ClipboardPasteIcon, FloppyDiskIcon, AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
+import { nextPresetName } from "./presetNames";
+import { captionOpacity, captionInk, type RGB } from "./contrast";
+import { backgroundPresets, paintBackgroundFill, backgroundFillCss, type BackgroundFill } from "./backgroundFill";
 import type { ColorMode } from "./gradientMaterial";
 import { migrateAppearance, shaderPresets, type ShaderPreset } from "./shaderMaterials";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
@@ -28,9 +31,11 @@ type EmbedPayload = {
   version:1;
   shape:{fileName:string;source:string|null;text?:string;fontUrl?:string};
   params:ShapeParams;
-  scene:{light:number;lightX:number;lightY:number;lightZ:number;ambientLight:number;shadowSoftness:number;shadowOpacity:number;shadows:boolean;background:string;camera?:{zoom:number;focalLength:number};rotation:{x:number;y:number;z:number}};
+  scene:{light:number;lightX:number;lightY:number;lightZ:number;ambientLight:number;shadowSoftness:number;shadowOpacity:number;shadows:boolean;background:string;gravity?:boolean;backgroundFill?:BackgroundFill;camera?:{zoom:number;focalLength:number};rotation:{x:number;y:number;z:number}};
   customMaterialUrl?:string;
 };
+
+type SavedPreset={id:string;name:string;params:ShapeParams;scene:EmbedPayload["scene"]};
 
 const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,revolveAngle:360,revolveEdge:"Outer",inflateAmount:55,inflateDirection:"Outward",bend:0,bulge:0,taper:0,twist:0,fontWeight:400,letterSpacing:0,lineSpacing:118,material:"Gloss",color:"#E0E0E0",colorMode:"Solid",gradientColor:"#6C5CE7",gradientAngle:0,colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,normalMapEnabled:true,glassIor:1.5,glassTransparency:100,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@",effect:"None",effectIntensity:70,effectBlur:4,effectBackground:false,duotoneDarkColor:"#090C13",duotoneColor:"#FF7A45"};
 
@@ -257,7 +262,7 @@ function EmbedViewer(){
   const p=migrateAppearance(payload.params),s=payload.scene;
   const glyphs=p.asciiCharacterSet==="Custom Set"?p.asciiCustomSet:(asciiCharacterSets[p.asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   return <main className="embed-shell">
-    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} customMaterialUrl={payload.customMaterialUrl} color={p.color} colorMode={p.colorMode??"Solid"} gradientColor={p.gradientColor??"#6C5CE7"} gradientAngle={p.gradientAngle??0} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} revolveAngle={p.revolveAngle??360} revolveEdge={p.revolveEdge??"Outer"} inflateAmount={p.inflateAmount} inflateDirection={p.inflateDirection??"Outward"} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalMapEnabled===false?0:p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.effect} effectIntensity={p.effectIntensity} effectBlur={p.effectBlur??4} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} onReady={applyRotation}/>
+    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} customMaterialUrl={payload.customMaterialUrl} color={p.color} colorMode={p.colorMode??"Solid"} gradientColor={p.gradientColor??"#6C5CE7"} gradientAngle={p.gradientAngle??0} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} revolveAngle={p.revolveAngle??360} revolveEdge={p.revolveEdge??"Outer"} inflateAmount={p.inflateAmount} inflateDirection={p.inflateDirection??"Outward"} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalMapEnabled===false?0:p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.effect} effectIntensity={p.effectIntensity} effectBlur={p.effectBlur??4} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} backgroundFill={s.backgroundFill} onReady={applyRotation}/>
     <a className="embed-brand" href={new URL(import.meta.env.BASE_URL,window.location.origin).href} target="_blank" rel="noreferrer"><img src={publicAsset("favicon.svg")} alt=""/><span>Playtools</span></a>
     <div className="embed-hint">LMB rotate · RMB pan · Scroll zoom</div>
   </main>;
@@ -324,7 +329,15 @@ function Home() {
   const [duotoneDarkColor,setDuotoneDarkColor]=useState("#090C13");
   const [duotoneColor,setDuotoneColor]=useState("#FF7A45");
   const [background, setBackground] = useState("Sky");
+  const [backgroundFill,setBackgroundFill]=useState<BackgroundFill>({colorMode:"Solid",color:"#B9DBE5",gradientColor:"#E0E5E5",gradientAngle:0});
   const [customBackgrounds,setCustomBackgrounds]=useState<CustomBackground[]>([]);
+  const [presets,setPresets]=useState<SavedPreset[]>(()=>{try{const saved=JSON.parse(localStorage.getItem("playtools-presets")??"[]");return Array.isArray(saved)?saved.filter(item=>item&&typeof item.id==="string"&&typeof item.name==="string"&&item.scene&&item.params&&Object.entries(defaultShapeParams).every(([key,value])=>typeof item.params[key]===typeof value&&(typeof value!=="number"||Number.isFinite(item.params[key])))):[];}catch{return [];}});
+  const [savingPreset,setSavingPreset]=useState(false);
+  const [newPresetId,setNewPresetId]=useState("");
+  const newPresetInputRef=useRef<HTMLInputElement>(null);
+  useEffect(()=>{if(newPresetId){newPresetInputRef.current?.focus();newPresetInputRef.current?.select();newPresetInputRef.current?.scrollIntoView({block:"nearest"});}},[newPresetId]);
+  const [selectedPreset,setSelectedPreset]=useState("");
+  const [captionColors,setCaptionColors]=useState({links:"black",hint:"black",logo:"white"});
   const [gravity,setGravity]=useState(false);
   const [cameraView, setCameraView] = useState({zoom:1,focalLength:54});
   const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
@@ -374,6 +387,7 @@ function Home() {
   const customMaterialUrl=activeCustomMaterial?.source;
   const isTexturedMaterial=textureMaterials.includes(material as BuiltInMaterial)||Boolean(activeCustomMaterial);
   const hasNormalMap=textureMaterials.includes(material as BuiltInMaterial);
+  useEffect(()=>setSelectedPreset(""),[activeShapeId]);
   const paramsSignature=JSON.stringify(currentParams);
 
   useEffect(()=>{const saved=window.localStorage.getItem("playtools-language");if(saved!=="ru"&&saved!=="en")return;const timer=window.setTimeout(()=>setLanguage(saved),0);return()=>window.clearTimeout(timer);},[]);
@@ -588,9 +602,58 @@ function Home() {
   const resetEffects = () => { setEffect("None");setAsciiCharacters(128);setAsciiCharacterSet("Letters + Numbers");setAsciiCustomSet(" .:-=+*#%@");setEffectIntensity(70);setEffectBlur(4);setEffectBackground(false);setDuotoneDarkColor("#090C13");setDuotoneColor("#FF7A45"); };
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
+  const savePreset=async()=>{
+    if(savingPreset)return;setSavingPreset(true);
+    const name=nextPresetName(presets.map(preset=>preset.name));
+    try{
+      const savedBackground=activeCustomBackground?await blobToDataUrl(activeCustomBackground.blob):background;
+      const preset:SavedPreset={id:crypto.randomUUID(),name,params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,gravity,background:savedBackground,backgroundFill:{...backgroundFill},camera:{...cameraView},rotation:{...rotation}}};
+      const next=[...presets,preset];localStorage.setItem("playtools-presets",JSON.stringify(next));setPresets(next);setSelectedPreset(preset.id);setNewPresetId(preset.id);
+      flash(language==="ru"?"Пресет сохранён":"Preset saved");
+    }catch{flash(language==="ru"?"Не удалось сохранить пресет: недостаточно места":"Could not save preset: storage is full");}
+    finally{setSavingPreset(false);}
+  };
+  const deletePreset=(id:string)=>{
+    try{const next=presets.filter(item=>item.id!==id);localStorage.setItem("playtools-presets",JSON.stringify(next));setPresets(next);setSelectedPreset("");}
+    catch{flash(language==="ru"?"Не удалось удалить пресет":"Could not delete preset");}
+  };
+  const renamePreset=(id:string,name:string)=>{
+    try{const next=presets.map(preset=>preset.id===id?{...preset,name}:preset);localStorage.setItem("playtools-presets",JSON.stringify(next));setPresets(next);}
+    catch{flash(language==="ru"?"Не удалось сохранить название":"Could not save preset name");}
+  };
+  const applyPreset=(id:string)=>{
+    const preset=presets.find(item=>item.id===id);if(!preset)return;
+    applyParams(preset.params);resetHistory(preset.params);
+    const s=preset.scene;setLight(s.light);setLightX(s.lightX);setLightY(s.lightY);setLightZ(s.lightZ);setAmbientLight(s.ambientLight);setShadowSoftness(s.shadowSoftness);setShadowOpacity(s.shadowOpacity);setShadows(s.shadows);setBackground(s.background);if(s.backgroundFill)setBackgroundFill(s.backgroundFill);setGravity(s.gravity??false);
+    stageRef.current?.reset();if(s.camera){stageRef.current?.setCamera("zoom",s.camera.zoom);stageRef.current?.setCamera("focalLength",s.camera.focalLength);}(["x","y","z"] as const).forEach(axis=>stageRef.current?.setRotation(axis,s.rotation[axis]));setSelectedPreset(id);
+    flash(language==="ru"?"Пресет применён":"Preset applied");
+  };
   const resetAll = () => { setGravity(false); resetGeometry(); resetDeform();resetTypography(); resetMaterial(); resetAppearance();resetEffects(); resetLighting(); resetBackground(); resetView(); flash("All parameters reset"); };
   const chooseColor = (next:string, add=true) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add)setPaletteColors(items=>items.includes(normalized)?items:[...items,normalized]); };
   const commitHex = () => { const value=hexDraft.trim(); if(/^#[0-9A-F]{6}$/i.test(value))chooseColor(value,true); else setHexDraft(color.toUpperCase()); };
+
+  useEffect(()=>{
+    let cancelled=false;const canvas=document.createElement("canvas");canvas.width=canvas.height=256;const ctx=canvas.getContext("2d");if(!ctx)return;
+    const update=()=>{
+      if(cancelled)return;
+      const colorFor=(selector:string,alpha=captionOpacity)=>{
+        const element=document.querySelector(selector);if(!element)return "black";
+        const rect=element.getBoundingClientRect(),samples:RGB[]=[];
+        for(const y of [.15,.5,.85])for(const x of [.1,.3,.5,.7,.9]){
+          const px=Math.max(0,Math.min(255,Math.floor((rect.left+rect.width*x)/window.innerWidth*256))),py=Math.max(0,Math.min(255,Math.floor((rect.top+rect.height*y)/window.innerHeight*256)));
+          const pixel=ctx.getImageData(px,py,1,1).data;samples.push([pixel[0],pixel[1],pixel[2]]);
+        }
+        return captionInk(samples,alpha);
+      };
+      try{setCaptionColors({links:colorFor(".project-links"),hint:colorFor(".drag-hint"),logo:colorFor(".studio-brand",1)});}catch{setCaptionColors({links:"white",hint:"white",logo:"white"});}
+    };
+    if(background.startsWith("blob:")||background.startsWith("data:image/")){
+      const image=new Image();image.onload=()=>{if(cancelled)return;ctx.fillStyle="#080808";ctx.fillRect(0,0,256,256);ctx.drawImage(image,0,0,256,256);update();};image.onerror=()=>{ctx.fillStyle="#080808";ctx.fillRect(0,0,256,256);update();};image.src=background;
+    }else{
+      const colors=backgroundPresets[background];paintBackgroundFill(ctx,background==="Fill"?backgroundFill:{colorMode:colors?"Linear":"Solid",color:colors?.[0]??"#080808",gradientColor:colors?.[1]??"#080808",gradientAngle:315});update();
+    }
+    window.addEventListener("resize",update);return()=>{cancelled=true;window.removeEventListener("resize",update);};
+  },[background,backgroundFill,language,interfaceHidden,gravity]);
 
   const prepareEmbed=async()=>{
     if(!activeShape||embedBusy)return;
@@ -600,7 +663,7 @@ function Home() {
       const fontUrl=activeShape.kind==="text"?(activeShape.fontBlob?await blobToDataUrl(activeShape.fontBlob):activeShape.fontUrl):undefined;
       const customMaterialUrl=activeCustomMaterial?await blobToDataUrl(activeCustomMaterial.blob):undefined;
       const embedBackground=activeCustomBackground?await blobToDataUrl(activeCustomBackground.blob):background;
-      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,background:embedBackground,camera:cameraView,rotation:{...rotation}},customMaterialUrl};
+      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,background:embedBackground,backgroundFill:background==="Fill"?backgroundFill:undefined,camera:cameraView,rotation:{...rotation}},customMaterialUrl};
       const encoded=await encodeEmbedPayload(payload);
       const url=new URL(import.meta.env.BASE_URL,window.location.origin);url.searchParams.set("embed","1");url.hash=encoded;
       setEmbedCode(`<iframe src="${url.href}" width="640" height="640" title="Playtools 3D model" style="border:0" loading="lazy" allow="fullscreen"></iframe>`);
@@ -610,8 +673,8 @@ function Home() {
   };
 
   return (
-    <main data-background={background} className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
-      <a className="studio-brand brand" href={import.meta.env.BASE_URL}><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
+    <main data-background={background} style={{"--caption-opacity":captionOpacity} as React.CSSProperties} className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
+      <a data-ink={captionColors.logo} className="studio-brand brand" href={import.meta.env.BASE_URL}><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
       <section className="workspace">
         <aside className="panel import-panel">
           <div className="panel-heading"><h2>{t("Source")}</h2></div>
@@ -625,7 +688,7 @@ function Home() {
           <div className="tip"><HugeiconsIcon icon={InformationCircleIcon} size={14} aria-hidden="true"/><p>{t(sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion.")}</p></div>
 
         </aside>
-          <div className="project-links">
+          <div className="project-links" data-ink={captionColors.links}>
             <a className="support-project" href="https://pay.cloudtips.ru/p/55cf592d" target="_blank" rel="noreferrer"><HugeiconsIcon icon={HeartIcon} size={14} aria-hidden="true"/><strong>{t("Support the project")}</strong></a>
             <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
           </div>
@@ -637,21 +700,34 @@ function Home() {
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorMode={colorMode} gradientColor={gradientColor} gradientAngle={gradientAngle} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} revolveAngle={revolveAngle} revolveEdge={revolveEdge} inflateAmount={inflateAmount} inflateDirection={inflateDirection} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalMapEnabled?normalStrength:0} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={effect} effectIntensity={effectIntensity} effectBlur={effectBlur} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} gravity={gravity} demoSpin={Boolean(activeShape?.demo&&activeShape.kind!=="object")} onCameraChange={setCameraView} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorMode={colorMode} gradientColor={gradientColor} gradientAngle={gradientAngle} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} revolveAngle={revolveAngle} revolveEdge={revolveEdge} inflateAmount={inflateAmount} inflateDirection={inflateDirection} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalMapEnabled?normalStrength:0} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={effect} effectIntensity={effectIntensity} effectBlur={effectBlur} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} backgroundFill={background==="Fill"?backgroundFill:undefined} gravity={gravity} demoSpin={Boolean(activeShape?.demo&&activeShape.kind!=="object")} onCameraChange={setCameraView} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>{t("Building geometry")}</b><small>{t("Interface stays responsive")}</small></div>}
           </div>
           <div className="axis-row">
             {(["x", "y", "z"] as const).map(axis=><div key={axis} className="axis-control" onPointerDown={event=>startAxisDrag(axis,event)} onPointerMove={moveAxisDrag} onPointerUp={endAxisDrag} onPointerCancel={endAxisDrag}><span>{axis.toUpperCase()}</span><input aria-label={`${axis.toUpperCase()} rotation`} type="number" min={-360} max={360} step={1} value={Math.round(rotation[axis]*10)/10} onChange={event=>updateAxis(axis,+event.target.value)}/><i>°</i></div>)}
             <label className="axis-control camera-control"><span>{language==="ru"?"Зум":"Zoom"}</span><input aria-label="Zoom" type="number" min={0.23} max={7.7} step={0.01} value={cameraView.zoom} onChange={event=>stageRef.current?.setCamera("zoom",event.target.valueAsNumber)}/><i>×</i></label>
             <label className="axis-control camera-control" title={language==="ru"?"Перспектива: размер объекта в кадре сохраняется":"Perspective: keeps the object framing steady"}><span>{language==="ru"?"Объектив":"Lens"}</span><input aria-label="Focal length" type="number" min={10} max={200} step={1} value={cameraView.focalLength} onChange={event=>stageRef.current?.setCamera("focalLength",event.target.valueAsNumber)}/><i>mm</i></label>
-            <p className="drag-hint">{gravity?(language==="ru"?"ЛКМ — тянуть · ПКМ — перемещение · Колесо — масштаб · G — стоп":"LMB drag · RMB pan · Scroll zoom · G freeze"):t("LMB rotate · RMB pan · Scroll zoom")}</p>
+            <p className="drag-hint" data-ink={captionColors.hint}>{gravity?(language==="ru"?"ЛКМ — тянуть · ПКМ — перемещение · Колесо — масштаб · G — стоп":"LMB drag · RMB pan · Scroll zoom · G freeze"):t("LMB rotate · RMB pan · Scroll zoom")}</p>
             <button className="view-reset" onClick={resetView} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={18} aria-hidden="true"/></button>
           </div>
         </section>
 
         <aside className="panel properties-panel">
-          <div className="panel-heading properties-heading"><h2>{t("Properties")}</h2><button className="reset-all" onClick={resetAll}><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/> {t("Reset all")}</button></div>
-          <div className="parameter-clipboard"><button onClick={copyParams}>{t("Copy Properties")}</button><button onClick={pasteParams}>{t("Paste Properties")}</button></div>
+          <div className="panel-heading properties-heading"><h2>{t("Properties")}</h2></div>
+          <div className="preset-controls">
+            <div className="preset-actions">
+              <button onClick={copyParams} title={t("Copy Properties")} aria-label={t("Copy Properties")}><HugeiconsIcon icon={Copy01Icon} size={16} aria-hidden="true"/></button>
+              <button onClick={pasteParams} title={t("Paste Properties")} aria-label={t("Paste Properties")}><HugeiconsIcon icon={ClipboardPasteIcon} size={16} aria-hidden="true"/></button>
+              <button onClick={()=>void savePreset()} disabled={savingPreset} title={language==="ru"?"Сохранить пресет":"Save preset"} aria-label={language==="ru"?"Сохранить пресет":"Save preset"}><HugeiconsIcon icon={FloppyDiskIcon} size={16} aria-hidden="true"/></button>
+              <button onClick={resetAll} title={t("Reset all")} aria-label={t("Reset all")}><HugeiconsIcon icon={RefreshIcon} size={16} aria-hidden="true"/></button>
+            </div>
+            <div className="preset-list">{presets.map(preset=><div key={preset.id} className={`preset-row ${selectedPreset===preset.id?"active":""}`}>
+
+              <input ref={preset.id===newPresetId?newPresetInputRef:undefined} aria-label={language==="ru"?`Название пресета ${preset.name}`:`Preset name ${preset.name}`} value={preset.name} maxLength={60} onChange={event=>renamePreset(preset.id,event.target.value)} onBlur={event=>{const name=event.target.value.trim()||nextPresetName(presets.map(item=>item.name));if(name!==preset.name)renamePreset(preset.id,name);}} onKeyDown={event=>{if(event.key==="Enter")event.currentTarget.blur();}}/>
+              <button onClick={()=>applyPreset(preset.id)} title={language==="ru"?`Применить ${preset.name}`:`Apply ${preset.name}`} aria-label={language==="ru"?`Применить ${preset.name}`:`Apply ${preset.name}`}><HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} aria-hidden="true"/></button>
+              <button onClick={()=>deletePreset(preset.id)} title={language==="ru"?"Удалить пресет":"Delete preset"} aria-label={language==="ru"?`Удалить ${preset.name}`:`Delete ${preset.name}`}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button>
+            </div>)}</div>
+          </div>
 
           {activeShape?.kind!=="object"&&<details className="property-section geometry-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Geometry")}</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
@@ -752,8 +828,14 @@ function Home() {
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Background")}</span><button onClick={(e)=>{e.preventDefault();resetBackground();}} aria-label="Reset background"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
             <div className="section-body">
               <label className="switch-row gravity-control"><span>{language==="ru"?"Гравитация":"Gravity"} <kbd>G</kbd></span><input aria-label={language==="ru"?"Гравитация":"Gravity"} type="checkbox" checked={gravity} onChange={event=>setGravity(event.target.checked)}/><i/></label>
-              <div className="control-row"><span>{t("Scene")}</span><output>{activeCustomBackground?.name??t(background)}</output></div>
-              <div className="backgrounds"><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></span><small>{t("None")}</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{t(item)}</small></button>)}{customBackgrounds.map(item=><BackgroundSwatch key={item.id} item={item} selected={background===item.source} onChoose={()=>setBackground(item.source)} onRemove={()=>deleteBackground(item.id)}/>)}<button className="upload-bg" onClick={() => backgroundRef.current?.click()}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/></span><small>{t("Upload")}</small></button></div>
+              <div className="control-row"><span>{t("Scene")}</span><output>{activeCustomBackground?.name??t(background==="Fill"||background.startsWith("data:image/")?"Custom":background)}</output></div>
+              <div className="backgrounds"><button className={background==="Fill"?"active":""} aria-label={language==="ru"?"Свой фон":"Custom background"} onClick={()=>setBackground("Fill")}><span style={{background:backgroundFillCss(backgroundFill)}}/><small>{language==="ru"?"Свой":"Custom"}</small></button><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></span><small>{t("None")}</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{t(item)}</small></button>)}{customBackgrounds.map(item=><BackgroundSwatch key={item.id} item={item} selected={background===item.source} onChoose={()=>setBackground(item.source)} onRemove={()=>deleteBackground(item.id)}/>)}<button className="upload-bg" onClick={() => backgroundRef.current?.click()}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/></span><small>{t("Upload")}</small></button></div>
+              {background==="Fill"&&<div className="gradient-controls background-fill">
+                <div className="fill-modes" role="group" aria-label="Background fill type">{(["Solid","Linear","Radial","Angular"] as ColorMode[]).map(mode=><button key={mode} className={backgroundFill.colorMode===mode?"active":""} onClick={()=>setBackgroundFill(current=>({...current,colorMode:mode}))}>{t(mode)}</button>)}</div>
+                <div className="gradient-preview" aria-hidden="true" style={{background:backgroundFillCss(backgroundFill)}}/>
+                <TonePalette plain label="Color" color={backgroundFill.color} colors={paletteColors} onChange={color=>setBackgroundFill(current=>({...current,color}))} t={t}/>
+                {backgroundFill.colorMode!=="Solid"&&<><TonePalette plain label="Second color" color={backgroundFill.gradientColor} colors={paletteColors} onChange={gradientColor=>setBackgroundFill(current=>({...current,gradientColor}))} t={t}/>{backgroundFill.colorMode!=="Radial"&&<RangeControl label={t("Gradient angle")} value={backgroundFill.gradientAngle} min={0} max={360} suffix="°" onChange={gradientAngle=>setBackgroundFill(current=>({...current,gradientAngle}))}/>}</>}
+              </div>}
               <input ref={backgroundRef} className="file-input" type="file" accept="image/*" onChange={(e) => {importBackground(e.target.files?.[0]);e.currentTarget.value="";}} />
             </div>
           </details>
