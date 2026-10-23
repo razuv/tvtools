@@ -881,7 +881,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
   useEffect(()=>{
     physicsRef.current=null;
-    if(runtimeRef.current)runtimeRef.current.autoRotate=false;
+    if(runtimeRef.current&&props.gravity)runtimeRef.current.autoRotate=false;
   },[props.gravity]);
   useEffect(()=>{if(runtimeRef.current)runtimeRef.current.model.position.set(0,0,0);physicsRef.current=null;},[props.source,props.text]);
 

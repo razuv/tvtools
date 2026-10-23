@@ -51,3 +51,17 @@ test("the complete cat stays above the shadow floor through impacts and rotation
   }
   geometry.dispose();
 });
+
+test("dense models use bounded collision meshes and sleeping bodies skip simulation",()=>{
+  const geometry=new THREE.SphereGeometry(1,64,32),model=new THREE.Group();model.position.y=2;
+  const physics=new ModelPhysics(geometry,model,-1);
+  assert.ok(physics.body.shapes[0].vertices.length<=90);
+  for(let frame=0;frame<2400;frame++)physics.step(1/120);
+  assert.equal(physics.body.sleepState,2);
+  let steps=0;const original=physics.world.step.bind(physics.world);
+  physics.world.step=(...args)=>{steps++;return original(...args);};
+  physics.step(1/30);assert.equal(steps,0);
+  physics.grab(model.position.clone());physics.dragTo(model.position.clone().add(new THREE.Vector3(0,2,0)));
+  physics.step(1/30);assert.ok(steps>0);assert.notEqual(physics.body.sleepState,2);
+  geometry.dispose();
+});

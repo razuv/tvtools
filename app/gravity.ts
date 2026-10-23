@@ -2,14 +2,7 @@ import * as THREE from "three";
 import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import { Body, Box, ConvexPolyhedron, GSSolver, Plane, Spring, Vec3, World } from "cannon-es";
 
-function collider(geometry:THREE.BufferGeometry) {
-  const positions=geometry.getAttribute("position"),points:THREE.Vector3[]=[];
-  // shortcut: a convex envelope approximates cavities; use convex decomposition for concave contact.
-  const unique=new Set<string>();
-  for(let i=0;i<positions.count;i++){
-    const point=new THREE.Vector3().fromBufferAttribute(positions,i),key=point.toArray().join(",");
-    if(!unique.has(key)){unique.add(key);points.push(point);}
-  }
+function convexData(points:THREE.Vector3[]) {
   const hull=new ConvexGeometry(points),attribute=hull.getAttribute("position");
   const vertices:Vec3[]=[],faces:number[][]=[],indices=new Map<string,number>();
   for(let i=0;i<attribute.count;i+=3){
@@ -21,9 +14,33 @@ function collider(geometry:THREE.BufferGeometry) {
     if(new Set(face).size===3)faces.push(face);
   }
   hull.dispose();
-  if(vertices.length>=4&&faces.length>=4)return new ConvexPolyhedron({vertices,faces});
+  return {vertices,faces};
+}
+
+function collider(geometry:THREE.BufferGeometry) {
+  const positions=geometry.getAttribute("position"),points:THREE.Vector3[]=[],unique=new Set<string>();
+  for(let i=0;i<positions.count;i++){
+    const point=new THREE.Vector3().fromBufferAttribute(positions,i),key=point.toArray().join(",");
+    if(!unique.has(key)){unique.add(key);points.push(point);}
+  }
+  const full=convexData(points);
+  let collision=full;
+  // Keep exact floor support, but bound the contact solver's convex mesh complexity.
+  if(full.vertices.length>96){
+    const sampled=new Set<Vec3>();
+    for(let x=-1;x<=1;x++)for(let y=-1;y<=1;y++)for(let z=-1;z<=1;z++){
+      if(!x&&!y&&!z)continue;
+      let best=full.vertices[0],score=-Infinity;
+      for(const point of full.vertices){const dot=x*point.x+y*point.y+z*point.z;if(dot>score){score=dot;best=point;}}
+      sampled.add(best);
+    }
+    for(let i=0;i<full.vertices.length;i+=Math.ceil(full.vertices.length/64))sampled.add(full.vertices[i]);
+    collision=convexData([...sampled].map(point=>new THREE.Vector3(point.x,point.y,point.z)));
+  }
+  // shortcut: convex contacts approximate cavities; use convex decomposition for concave contact.
+  if(collision.vertices.length>=4&&collision.faces.length>=4)return {shape:new ConvexPolyhedron(collision),support:full.vertices};
   geometry.computeBoundingBox();const size=geometry.boundingBox!.getSize(new THREE.Vector3()).multiplyScalar(.5);
-  return new Box(new Vec3(Math.max(size.x,.01),Math.max(size.y,.01),Math.max(size.z,.01)));
+  return {shape:new Box(new Vec3(Math.max(size.x,.01),Math.max(size.y,.01),Math.max(size.z,.01))),support:full.vertices};
 }
 
 export class ModelPhysics {
@@ -36,12 +53,15 @@ export class ModelPhysics {
   readonly geometry:THREE.BufferGeometry;
   private readonly model:THREE.Object3D;
   private readonly floorY:number;
+  private readonly support:Vec3[];
+  private readonly localUp=new Vec3();
   constructor(geometry:THREE.BufferGeometry,model:THREE.Object3D,floorY:number) {
     this.geometry=geometry;this.model=model;this.floorY=floorY;
     (this.world.solver as GSSolver).iterations=16;
     this.world.defaultContactMaterial.friction=.55;this.world.defaultContactMaterial.restitution=.28;
     const floor=new Body({mass:0,shape:new Plane()});floor.position.y=floorY;floor.quaternion.setFromEuler(-Math.PI/2,0,0);this.world.addBody(floor);
-    this.body=new Body({mass:1,shape:collider(geometry),linearDamping:.12,angularDamping:.25,allowSleep:true,sleepSpeedLimit:.08,sleepTimeLimit:1});
+    const {shape,support}=collider(geometry);this.support=support;
+    this.body=new Body({mass:1,shape,linearDamping:.12,angularDamping:.25,allowSleep:true,sleepSpeedLimit:.08,sleepTimeLimit:1});
     this.body.position.set(model.position.x,model.position.y,model.position.z);this.body.quaternion.set(model.quaternion.x,model.quaternion.y,model.quaternion.z,model.quaternion.w);this.world.addBody(this.body);this.world.addBody(this.anchor);
   }
   get dragging(){return this.spring!==null;}
@@ -53,7 +73,7 @@ export class ModelPhysics {
   dragTo(point:THREE.Vector3){if(this.spring){this.anchor.position.set(point.x,point.y,point.z);this.body.wakeUp();}}
   release(){this.spring=null;}
   step(elapsed:number) {
-    if(!Number.isFinite(elapsed)||elapsed<=0)return;
+    if(!Number.isFinite(elapsed)||elapsed<=0||this.body.sleepState===Body.SLEEPING&&!this.spring)return;
     this.elapsed+=Math.min(elapsed,.05);
     while(this.elapsed>=1/120){
       this.spring?.applyForce();
@@ -63,7 +83,9 @@ export class ModelPhysics {
     }
     this.model.position.copy(this.body.position);this.model.quaternion.copy(this.body.quaternion);
     // Keep solver contact penetration out of the rendered pose without cancelling collision impulses.
-    this.body.updateAABB();
-    this.model.position.y+=Math.max(0,this.floorY-this.body.aabb.lowerBound.y);
+    this.body.vectorToLocalFrame(Vec3.UNIT_Y,this.localUp);
+    let bottom=Infinity;
+    for(const point of this.support)bottom=Math.min(bottom,point.dot(this.localUp));
+    this.model.position.y+=Math.max(0,this.floorY-this.body.position.y-bottom);
   }
 }

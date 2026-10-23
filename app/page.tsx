@@ -119,7 +119,8 @@ const googleFonts:FontOption[] = [
 ];
 
 const demoModel:ShapeItem={id:"demo-cat",name:"Cat Base Mesh.obj",source:publicAsset("models/cat.obj"),demo:true,kind:"object"};
-const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image"};
+const demoShapeParams:ShapeParams={...defaultShapeParams,geometryMode:"Inflate",segments:1024,surfaceDetail:5,inflateAmount:50,material:"Fur",color:"#2878FF",colorMode:"Linear"};
+const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image",params:demoShapeParams};
 const libraryDatabase="shape3d-studio-library";
 const libraryStore="state";
 
@@ -281,15 +282,15 @@ function Home() {
   const [textDraft, setTextDraft] = useState("SHAPE");
   const [fontDraft, setFontDraft] = useState(googleFonts[0].url);
   const [customFonts,setCustomFonts]=useState<FontOption[]>([]);
-  const [geometryMode,setGeometryMode]=useState<GeometryMode>("Extrude");
+  const [geometryMode,setGeometryMode]=useState<GeometryMode>(demoShapeParams.geometryMode);
   const [thickness, setThickness] = useState(42);
-  const [segments, setSegments] = useState(18);
-  const [surfaceDetail, setSurfaceDetail] = useState(3);
+  const [segments, setSegments] = useState(demoShapeParams.segments);
+  const [surfaceDetail, setSurfaceDetail] = useState(demoShapeParams.surfaceDetail);
   const [edge, setEdge] = useState(24);
   const [mass, setMass] = useState(0);
   const [revolveAngle,setRevolveAngle]=useState(360);
   const [revolveEdge,setRevolveEdge]=useState<RevolveEdge>("Outer");
-  const [inflateAmount,setInflateAmount]=useState(55);
+  const [inflateAmount,setInflateAmount]=useState(demoShapeParams.inflateAmount);
   const [inflateDirection,setInflateDirection]=useState<InflateDirection>("Outward");
   const [bend, setBend] = useState(0);
   const [bulge, setBulge] = useState(0);
@@ -298,9 +299,9 @@ function Home() {
   const [fontWeight,setFontWeight]=useState(400);
   const [letterSpacing,setLetterSpacing]=useState(0);
   const [lineSpacing,setLineSpacing]=useState(118);
-  const [material, setMaterial] = useState<Material>("Gloss");
-  const [color, setColor] = useState("#E0E0E0");
-  const [hexDraft, setHexDraft] = useState("#E0E0E0");
+  const [material, setMaterial] = useState<Material>(demoShapeParams.material);
+  const [color, setColor] = useState(demoShapeParams.color);
+  const [hexDraft, setHexDraft] = useState(demoShapeParams.color);
   const [paletteColors, setPaletteColors] = useState(initialPalette);
   const [colorOpacity, setColorOpacity] = useState(100);
   const [glassIor, setGlassIor] = useState(1.5);
@@ -317,7 +318,7 @@ function Home() {
   const [textureRepeat, setTextureRepeat] = useState(2);
   const [textureRotation, setTextureRotation] = useState(0);
   const [textureTint, setTextureTint] = useState(0);
-  const [colorMode,setColorMode]=useState<ColorMode>("Solid");
+  const [colorMode,setColorMode]=useState<ColorMode>(demoShapeParams.colorMode);
   const [gradientColor,setGradientColor]=useState("#6C5CE7");
   const [gradientAngle,setGradientAngle]=useState(0);
   const [furLength,setFurLength]=useState(35);
@@ -333,7 +334,7 @@ function Home() {
   const [effectBackground,setEffectBackground]=useState(false);
   const [duotoneDarkColor,setDuotoneDarkColor]=useState("#090C13");
   const [duotoneColor,setDuotoneColor]=useState("#FF7A45");
-  const [background, setBackground] = useState("Sky");
+  const [background, setBackground] = useState("None");
   const [backgroundFill,setBackgroundFill]=useState<BackgroundFill>({colorMode:"Solid",color:"#B9DBE5",gradientColor:"#E0E5E5",gradientAngle:0});
   const [customBackgrounds,setCustomBackgrounds]=useState<CustomBackground[]>([]);
   const [presets,setPresets]=useState<SavedPreset[]>(()=>{try{const saved=JSON.parse(localStorage.getItem("playtools-presets")??"[]");return Array.isArray(saved)?saved.map(item=>item?.params?{...item,params:{...defaultShapeParams,...item.params}}:item).filter(item=>item&&typeof item.id==="string"&&typeof item.name==="string"&&item.scene&&item.params&&Object.entries(defaultShapeParams).every(([key,value])=>typeof item.params[key]===typeof value&&(typeof value!=="number"||Number.isFinite(item.params[key])))):[];}catch{return [];}});
