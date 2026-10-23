@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, ArrowLeftRightIcon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
+import { AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
 import type { ColorMode } from "./gradientMaterial";
 import { migrateAppearance, shaderPresets, type ShaderPreset } from "./shaderMaterials";
 import { ThreeStage, type StageHandle } from "./ThreeStage";
+import { parseModel } from "./modelImport";
 
 type BuiltInMaterial = "Gloss" | "Metal" | "Glass" | "Wood" | "Stone" | "Marble" | "Leather" | "Concrete" | "Rubber" | "Clay" | "Chrome" | ShaderPreset;
 type Material = BuiltInMaterial | `Custom:${string}`;
@@ -16,7 +17,7 @@ type PostEffect = "Thermal" | "ASCII" | "None" | "Cartoon" | "Sketch" | "Halfton
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
 type Language = "en" | "ru";
 type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;revolveAngle:number;revolveEdge:RevolveEdge;inflateAmount:number;inflateDirection:InflateDirection;bend:number;bulge:number;taper:number;twist:number;fontWeight:number;letterSpacing:number;lineSpacing:number;material:Material;color:string;colorMode:ColorMode;gradientColor:string;gradientAngle:number;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;normalMapEnabled:boolean;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string;effect:PostEffect;effectIntensity:number;effectBlur:number;effectBackground:boolean;duotoneDarkColor:string;duotoneColor:string };
-type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string; fontBlob?:Blob };
+type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"|"object"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string; fontBlob?:Blob };
 type FontOption = { id:string; name:string; family:string; url:string; blob?:Blob; custom?:boolean };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
 type CustomBackground = { id:string; name:string; blob:Blob; source:string };
@@ -27,7 +28,7 @@ type EmbedPayload = {
   version:1;
   shape:{fileName:string;source:string|null;text?:string;fontUrl?:string};
   params:ShapeParams;
-  scene:{light:number;lightX:number;lightY:number;lightZ:number;ambientLight:number;shadowSoftness:number;shadowOpacity:number;shadows:boolean;background:string;rotation:{x:number;y:number;z:number}};
+  scene:{light:number;lightX:number;lightY:number;lightZ:number;ambientLight:number;shadowSoftness:number;shadowOpacity:number;shadows:boolean;background:string;camera?:{zoom:number;focalLength:number};rotation:{x:number;y:number;z:number}};
   customMaterialUrl?:string;
 };
 
@@ -64,14 +65,14 @@ async function decodeEmbedPayload(value:string){
 }
 
 const ru:Record<string,string>={
-  "Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Figma: Copy as SVG or PNG, then paste":"Figma: Copy as SVG или PNG, затем вставьте","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
+  "Imported model":"Импортированная модель","Create":"Создать","Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Figma: Copy as SVG or PNG, then paste":"Figma: Copy as SVG или PNG, затем вставьте","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
   "Text becomes real editable 3D outlines, including counters inside letters.":"Текст преобразуется в редактируемые 3D-контуры, включая полости внутри букв.","Transparent shapes with clean edges give the best extrusion.":"Прозрачные фигуры с чистыми краями дают лучший результат экструзии.","Support the project":"Поддержать проект",
   "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Center object":"Вернуть в центр","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","LMB rotate · RMB pan · Scroll zoom":"ЛКМ — вращение · ПКМ — перемещение · Колесо — масштаб",
   "Properties":"Параметры","Reset all":"Сбросить всё","Copy Properties":"Копировать параметры","Paste Properties":"Вставить параметры","Geometry":"Геометрия","Extrude":"Экструзия","Revolve":"Вращение","Inflate":"Надувание","Thickness":"Толщина","Segments":"Сегменты","Surface detail":"Детализация поверхности","Edge":"Фаска","Mass":"Масса","Angle":"Угол","Axis edge":"Край оси","Outer":"Внешний","Inner":"Внутренний","Inflation":"Надувание","Direction":"Направление","Outward":"Наружу","Inward":"Внутрь",
   "Deform":"Деформация","Bend":"Изгиб","Bulge":"Выпуклость","Taper":"Сужение","Twist":"Скручивание","Material":"Материал","Surface":"Поверхность","High shine":"Глянец","Brushed":"Шлифованный","Clear":"Прозрачный","CC0 texture":"Текстура CC0","Soft matte":"Мягкий матовый","Mirror":"Зеркальный","Real-time text":"Текст в реальном времени",
   "Drop JPG material":"Перетащите JPG-материал","Recommended: seamless square 1024×1024, sRGB, ≤ 8 MB":"Рекомендуется: бесшовный квадрат 1024×1024, sRGB, ≤ 8 МБ","Custom diffuse / albedo":"Пользовательский diffuse / albedo","Texture by Poly Haven":"Текстура Poly Haven","Texture by ambientCG":"Текстура ambientCG","Repeat":"Повтор","Rotation":"Вращение","Color overlay":"Наложение цвета","Normal map":"Карта нормалей","Normal strength":"Сила рельефа","Physical refraction":"Физическая рефракция","Refraction (IOR)":"Рефракция (IOR)","Transparency":"Прозрачность",
   "Characters":"Символы","Character Set":"Набор символов","Letters":"Буквы","Numbers":"Цифры","Letters + Numbers":"Буквы + цифры","Arrows & Chevrons":"Стрелки и шевроны","Math & Symbols":"Математика и символы","Custom Set":"Свой набор","Default ramp":"Стандартная шкала","Real-time character render":"Рендер символов в реальном времени",
-  "Typography":"Типографика","Font weight":"Начертание","Letter spacing":"Межбуквенное расстояние","Line spacing":"Межстрочное расстояние","Appearance":"Внешний вид","Color":"Цвет","Solid":"Сплошной","Linear":"Линейный","Radial":"Радиальный","Angular":"Угловой","Second color":"Второй цвет","Gradient angle":"Угол градиента","Roughness":"Шероховатость","Color opacity":"Прозрачность цвета","Shader materials":"Шейдерные материалы","Procedural":"Процедурный","Satin":"Сатин","Pearl":"Перламутр","Lava":"Лава","Voronoi":"Вороной","Iridescent":"Переливы","Plasma":"Плазма","Contour":"Контуры","Hologram":"Голограмма","Effects":"Эффекты","Cartoon":"Мультфильм","Sketch":"Скетч","Halftone":"Растр","Pixelate":"Пикселизация","Chromatic":"Хроматический","Duotone":"Дуотон","Dither":"Дизеринг","Glow":"Свечение","Intensity":"Интенсивность","Blur":"Размытие","Thermal":"Тепловизор","Night Vision":"Ночное видение","Emboss":"Тиснение","First tone":"Первый тон","Second tone":"Второй тон","Affect background":"Обрабатывать фон","Post-processing is unavailable for ASCII":"Пост-обработка недоступна для ASCII","Lighting":"Освещение","Strength":"Яркость","Ambient":"Окружение","Shadow softness":"Мягкость тени","Shadow opacity":"Прозрачность тени","Depth":"Глубина","Soft shadow":"Мягкая тень","Background":"Фон","Scene":"Сцена","None":"Нет","Custom":"Пользовательский","Upload":"Загрузить","Noir":"Нуар","Sky":"Небо","Sunset":"Закат","Gallery":"Галерея","Acid":"Кислотный",
+  "Typography":"Типографика","Font weight":"Начертание","Letter spacing":"Межбуквенное расстояние","Line spacing":"Межстрочное расстояние","Appearance":"Внешний вид","Color":"Цвет","Solid":"Сплошной","Linear":"Линейный","Radial":"Радиальный","Angular":"Угловой","Second color":"Второй цвет","Gradient angle":"Угол градиента","Roughness":"Шероховатость","Color opacity":"Прозрачность цвета","Shader materials":"Шейдерные материалы","Procedural":"Процедурный","Satin":"Сатин","Pearl":"Перламутр","Lava":"Лава","Voronoi":"Вороной","Iridescent":"Переливы","Plasma":"Плазма","Contour":"Контуры","Hologram":"Голограмма","Effects":"Эффекты","Cartoon":"Мультфильм","Sketch":"Скетч","Halftone":"Растр","Pixelate":"Пикселизация","Chromatic":"Хроматический","Duotone":"Дуотон","Dither":"Дизеринг","Glow":"Свечение","Intensity":"Интенсивность","Blur":"Размытие","Thermal":"Тепловизор","Night Vision":"Ночное видение","Emboss":"Тиснение","First tone":"Первый тон","Second tone":"Второй тон","Affect background":"Обрабатывать фон","Post-processing is unavailable for ASCII":"Пост-обработка недоступна для ASCII","Lighting":"Освещение","Strength":"Яркость","Ambient":"Окружение","Shadow softness":"Мягкость тени","Shadow opacity":"Прозрачность тени","Depth":"Глубина","Soft shadow":"Мягкая тень","Background":"Фон","Scene":"Сцена","None":"Нет","Custom":"Пользовательский","Upload":"Загрузить","Noir":"Нуар","Sky":"Небо","Sunset":"Закат","Gallery":"Галерея","Acid":"Кислота",
   "Gloss":"Глянец","Metal":"Металл","Glass":"Стекло","Wood":"Дерево","Stone":"Камень","Marble":"Мрамор","Leather":"Кожа","Concrete":"Бетон","Rubber":"Резина","Clay":"Глина","Chrome":"Хром",
   "Ready to export":"Готово к экспорту","Transparent background":"Прозрачный фон","Background included":"Фон включён","High quality":"Высокое качество","Transparent":"Прозрачный","Studio black":"Чёрный фон","Scene background":"Фон сцены","Interactive":"Интерактивный","ASCII graphic":"ASCII-графика","3D geometry":"3D-геометрия",
   "Standard":"Стандарт","Diffuse":"Рассеянный","Top Left":"Сверху слева","Right":"Справа","Drag to position light":"Перетащите источник света","Playtools are available on desktop only.":"Playtools доступен только на десктопе.","INTERACTIVE EMBED":"ИНТЕРАКТИВНЫЙ EMBED","Put this shape anywhere.":"Разместите эту фигуру где угодно.","Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.":"Скопируйте код и вставьте его на сайт. Модель сохранит вращение, материал и цвет.","Copy embed code":"Скопировать embed-код",
@@ -110,6 +111,7 @@ const googleFonts:FontOption[] = [
   {id:"russo-one",name:"Russo One",family:"Studio Russo One",url:publicAsset("fonts/russo-one.ttf")},
 ];
 
+const demoModel:ShapeItem={id:"demo-teapot",name:"Utah Teapot.obj",source:publicAsset("models/teapot.obj"),demo:true,kind:"object"};
 const demoShape:ShapeItem={id:"demo-rzw",name:"rzw.svg",source:publicAsset("rzw.svg"),demo:true,kind:"image"};
 const libraryDatabase="shape3d-studio-library";
 const libraryStore="state";
@@ -249,7 +251,7 @@ function EmbedViewer(){
   const stageRef=useRef<StageHandle>(null);
   const rotationApplied=useRef(false);
   useEffect(()=>{let cancelled=false;decodeEmbedPayload(window.location.hash.slice(1)).then(value=>{if(!cancelled)setPayload(value);}).catch(()=>{if(!cancelled)setError("This embed link is invalid or incomplete.");});return()=>{cancelled=true;};},[]);
-  const applyRotation=useCallback(()=>{if(!payload||rotationApplied.current)return;rotationApplied.current=true;(["x","y","z"] as const).forEach(axis=>stageRef.current?.setRotation(axis,payload.scene.rotation[axis]));},[payload]);
+  const applyRotation=useCallback(()=>{if(!payload||rotationApplied.current)return;rotationApplied.current=true;if(payload.scene.camera){stageRef.current?.setCamera("zoom",payload.scene.camera.zoom);stageRef.current?.setCamera("focalLength",payload.scene.camera.focalLength);}(["x","y","z"] as const).forEach(axis=>stageRef.current?.setRotation(axis,payload.scene.rotation[axis]));},[payload]);
   if(error)return <main className="embed-shell embed-message"><img src={publicAsset("favicon.svg")} alt=""/><strong>Playtools</strong><p>{error}</p></main>;
   if(!payload)return <main className="embed-shell embed-message"><span className="embed-spinner"/><strong>Loading Playtools embed</strong></main>;
   const p=migrateAppearance(payload.params),s=payload.scene;
@@ -263,11 +265,11 @@ function EmbedViewer(){
 
 function Home() {
   const [language,setLanguage]=useState<Language>("en");
-  const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape]);
+  const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape,demoModel]);
   const [customMaterials,setCustomMaterials]=useState<CustomMaterial[]>([]);
   const [activeShapeId, setActiveShapeId] = useState("demo-rzw");
   const [libraryReady, setLibraryReady] = useState(false);
-  const [sourceMode, setSourceMode] = useState<"image"|"text">("image");
+  const [sourceMode, setSourceMode] = useState<"image"|"text"|"object">("image");
   const [textDraft, setTextDraft] = useState("SHAPE");
   const [fontDraft, setFontDraft] = useState(googleFonts[0].url);
   const [customFonts,setCustomFonts]=useState<FontOption[]>([]);
@@ -321,8 +323,10 @@ function Home() {
   const [effectBackground,setEffectBackground]=useState(false);
   const [duotoneDarkColor,setDuotoneDarkColor]=useState("#090C13");
   const [duotoneColor,setDuotoneColor]=useState("#FF7A45");
-  const [background, setBackground] = useState("None");
+  const [background, setBackground] = useState("Sky");
   const [customBackgrounds,setCustomBackgrounds]=useState<CustomBackground[]>([]);
+  const [gravity,setGravity]=useState(false);
+  const [cameraView, setCameraView] = useState({zoom:1,focalLength:54});
   const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
   const [triangles, setTriangles] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false);
@@ -397,9 +401,9 @@ function Home() {
       const restoredFonts=[...restoredFontMap.values()];
       restoredFonts.forEach(font=>{const face=new FontFace(font.family,`url("${font.url}")`);face.load().then(loaded=>document.fonts.add(loaded)).catch(()=>{});});
       const restoredMaterials=(saved?.materials??[]).map(item=>({...item,source:URL.createObjectURL(item.blob)}));
-      const items=[demoShape,...restored];
+      const items=[demoShape,demoModel,...restored];
       const target=items.find(item=>item.id===saved?.activeShapeId)??items[0];
-      setShapeItems(items);setCustomFonts(restoredFonts);setCustomMaterials(restoredMaterials);setActiveShapeId(target.id);setSourceMode(target.kind==="text"?"text":"image");
+      setShapeItems(items);setCustomFonts(restoredFonts);setCustomMaterials(restoredMaterials);setActiveShapeId(target.id);setSourceMode(target.kind??"image");
       if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}
       const params=target.params??{...defaultShapeParams};applyParams(params);resetHistory(params);
     }).catch(()=>{}).finally(()=>{if(!cancelled)setLibraryReady(true);});
@@ -429,18 +433,22 @@ function Home() {
     return()=>window.clearTimeout(timer);
   },[shapeItems,customMaterials,activeShapeId,libraryReady,flash]);
 
-  const importFile = useCallback((file?: File,successMessage="Shape added to the library") => {
+  const importFile = useCallback(async (file?: File,successMessage="Shape added to the library") => {
     if (!file) return;
-    if (!/\.(svg|png)$/i.test(file.name)) {
-      flash("SVG and PNG files only");
+    if (!/\.(svg|png|obj|stl)$/i.test(file.name)) {
+      flash("SVG, PNG, OBJ and STL files only");
       return;
     }
     if(file.size>12*1024*1024){flash("File is larger than 12 MB");return;}
+    if(/\.(obj|stl)$/i.test(file.name)) {
+      try { const geometry=parseModel(await file.arrayBuffer(),file.name);geometry.dispose(); }
+      catch(error){flash(error instanceof Error?error.message:"Could not load model");return;}
+    }
     const params={...defaultShapeParams};
-    const item:ShapeItem={id:`shape-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:file.name,source:URL.createObjectURL(file),blob:file,params,kind:"image"};
+    const item:ShapeItem={id:`shape-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:file.name,source:URL.createObjectURL(file),blob:file,params,kind:/\.(obj|stl)$/i.test(file.name)?"object":"image"};
     setShapeItems(items=>[...items,item]);
     setActiveShapeId(item.id);
-    setSourceMode("image");
+    setSourceMode(item.kind??"image");
     applyParams(params);
     resetHistory(params);
     flash(successMessage);
@@ -462,6 +470,7 @@ function Home() {
       importPastedFile(file);
     };
     const handleKeyDown=(event:KeyboardEvent)=>{
+      if(event.code==="KeyG"&&!event.repeat&&!event.metaKey&&!event.ctrlKey&&!event.altKey&&!(event.target instanceof Element&&event.target.closest("input,textarea,select,[contenteditable]"))){event.preventDefault();setGravity(value=>!value);return;}
       if(event.key.toLowerCase()!=="v"||(!event.metaKey&&!event.ctrlKey)||!navigator.clipboard?.read)return;
       const started=Date.now();
       const fallback=navigator.clipboard.read().then(fileFromClipboardItems).catch(()=>null);
@@ -550,7 +559,7 @@ function Home() {
 
   function applyParams(params:ShapeParams,suppress=true){params=migrateAppearance(params);if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setRevolveAngle(params.revolveAngle??360);setRevolveEdge(params.revolveEdge??"Outer");setInflateAmount(params.inflateAmount??55);setInflateDirection(params.inflateDirection??"Outward");setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setFontWeight(params.fontWeight??400);setLetterSpacing(params.letterSpacing??0);setLineSpacing(params.lineSpacing??118);setMaterial(params.material);setColor(params.color);setColorMode(params.colorMode??"Solid");setGradientColor(params.gradientColor??"#6C5CE7");setGradientAngle(params.gradientAngle??0);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setNormalStrength(params.normalStrength??135);setNormalMapEnabled(params.normalMapEnabled??true);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??128);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");setEffect(params.effect??"None");setEffectIntensity(params.effectIntensity??70);setEffectBlur(params.effectBlur??4);setEffectBackground(params.effectBackground??false);setDuotoneDarkColor(params.duotoneDarkColor??"#090C13");setDuotoneColor(params.duotoneColor??"#FF7A45");}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
-  const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind==="text"?"text":"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
+  const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind??"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
   const deleteShape=(id:string)=>{
     const index=shapeItems.findIndex(item=>item.id===id),target=shapeItems[index];
     if(index<0||target.demo)return;
@@ -560,7 +569,7 @@ function Home() {
     if(id===activeShapeId){
       const next=remaining[Math.min(index,remaining.length-1)]??demoShape;
       const params=next.params??{...defaultShapeParams};
-      setActiveShapeId(next.id);setSourceMode(next.kind==="text"?"text":"image");
+      setActiveShapeId(next.id);setSourceMode(next.kind??"image");
       if(next.kind==="text"){setTextDraft(next.text??"");setFontDraft(next.fontUrl??googleFonts[0].url);}
       applyParams(params);resetHistory(params);
     }
@@ -579,7 +588,7 @@ function Home() {
   const resetEffects = () => { setEffect("None");setAsciiCharacters(128);setAsciiCharacterSet("Letters + Numbers");setAsciiCustomSet(" .:-=+*#%@");setEffectIntensity(70);setEffectBlur(4);setEffectBackground(false);setDuotoneDarkColor("#090C13");setDuotoneColor("#FF7A45"); };
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
   const resetBackground = () => setBackground("None");
-  const resetAll = () => { resetGeometry(); resetDeform();resetTypography(); resetMaterial(); resetAppearance();resetEffects(); resetLighting(); resetBackground(); resetView(); flash("All parameters reset"); };
+  const resetAll = () => { setGravity(false); resetGeometry(); resetDeform();resetTypography(); resetMaterial(); resetAppearance();resetEffects(); resetLighting(); resetBackground(); resetView(); flash("All parameters reset"); };
   const chooseColor = (next:string, add=true) => { const normalized=next.toUpperCase(); setColor(normalized); setHexDraft(normalized); if(add)setPaletteColors(items=>items.includes(normalized)?items:[...items,normalized]); };
   const commitHex = () => { const value=hexDraft.trim(); if(/^#[0-9A-F]{6}$/i.test(value))chooseColor(value,true); else setHexDraft(color.toUpperCase()); };
 
@@ -591,7 +600,7 @@ function Home() {
       const fontUrl=activeShape.kind==="text"?(activeShape.fontBlob?await blobToDataUrl(activeShape.fontBlob):activeShape.fontUrl):undefined;
       const customMaterialUrl=activeCustomMaterial?await blobToDataUrl(activeCustomMaterial.blob):undefined;
       const embedBackground=activeCustomBackground?await blobToDataUrl(activeCustomBackground.blob):background;
-      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,background:embedBackground,rotation:{...rotation}},customMaterialUrl};
+      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,background:embedBackground,camera:cameraView,rotation:{...rotation}},customMaterialUrl};
       const encoded=await encodeEmbedPayload(payload);
       const url=new URL(import.meta.env.BASE_URL,window.location.origin);url.searchParams.set("embed","1");url.hash=encoded;
       setEmbedCode(`<iframe src="${url.href}" width="640" height="640" title="Playtools 3D model" style="border:0" loading="lazy" allow="fullscreen"></iframe>`);
@@ -601,45 +610,50 @@ function Home() {
   };
 
   return (
-    <main className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
+    <main data-background={background} className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
+      <a className="studio-brand brand" href={import.meta.env.BASE_URL}><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
       <section className="workspace">
         <aside className="panel import-panel">
-          <div className="panel-heading"><span>01</span><h2>{t("Source")}</h2></div>
-          <div className="source-tabs"><button className={sourceMode==="image"?"active":""} onClick={()=>setSourceMode("image")}>{t("Image")}</button><button className={sourceMode==="text"?"active":""} onClick={()=>setSourceMode("text")}>{t("Text")}</button></div>
-          {sourceMode==="image"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
-            <span className="upload-icon"><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/></span><strong>{t("Drop your shape")}</strong><small>SVG or PNG · max 12 MB</small><small className="figma-hint">{t("Figma: Copy as SVG or PNG, then paste")}</small>
-          </button>:<div className="text-source"><label><span>{t("Text")}</span><textarea aria-label={t("Text")} maxLength={120} rows={3} value={textDraft} style={{fontFamily:activeFont.family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><span>{t("Font")}</span><select aria-label={t("Font")} value={fontDraft} onChange={event=>setFontDraft(event.target.value)}><optgroup label={t("Google Fonts")}>{googleFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>{customFonts.length>0&&<optgroup label={t("Custom Fonts")}>{customFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>}</select></label><button className="font-upload" onClick={()=>fontRef.current?.click()}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/> {t("Upload font")}</span><small>{t("TTF / OTF · max 12 MB")}</small></button><button className="create-text" onClick={createTextShape}><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/> {t("Create text shape")}</button><small>{activeFont.custom?"Local font":"Open Font License"} · ⌘ Enter</small></div>}
-          <input ref={fileRef} className="file-input" type="file" accept=".svg,.png,image/svg+xml,image/png" onChange={(e) => importFile(e.target.files?.[0])} />
+          <div className="panel-heading"><h2>{t("Source")}</h2></div>
+          <div className="source-tabs"><button className={sourceMode==="image"?"active":""} title={t("Image")} aria-label={t("Image")} aria-pressed={sourceMode==="image"} onClick={()=>setSourceMode("image")}><HugeiconsIcon icon={Image01Icon} size={18} aria-hidden="true"/></button><button className={sourceMode==="text"?"active":""} title={t("Text")} aria-label={t("Text")} aria-pressed={sourceMode==="text"} onClick={()=>setSourceMode("text")}><HugeiconsIcon icon={TextIcon} size={18} aria-hidden="true"/></button><button className={sourceMode==="object"?"active":""} title={language==="ru"?"Объект":"Object"} aria-label={language==="ru"?"Объект":"Object"} aria-pressed={sourceMode==="object"} onClick={()=>setSourceMode("object")}><HugeiconsIcon icon={CubeIcon} size={18} aria-hidden="true"/></button></div>
+          {sourceMode!=="text"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
+            <span className="upload-icon"><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/></span><strong>{sourceMode==="object"?(language==="ru"?"Загрузите модель":"Drop your model"):t("Drop your shape")}</strong><small>{sourceMode==="object"?"OBJ or STL":"SVG or PNG"} · max 12 MB</small>{sourceMode!=="object"&&<small className="figma-hint">{t("Figma: Copy as SVG or PNG, then paste")}</small>}
+          </button>:<div className="text-source"><label><textarea aria-label={t("Text")} maxLength={120} rows={2} value={textDraft} style={{fontFamily:activeFont.family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><select aria-label={t("Font")} value={fontDraft} onChange={event=>setFontDraft(event.target.value)}><optgroup label={t("Google Fonts")}>{googleFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>{customFonts.length>0&&<optgroup label={t("Custom Fonts")}>{customFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>}</select></label><button className="font-upload" onClick={()=>fontRef.current?.click()}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/> {t("Upload font")}</span></button><button className="create-text" onClick={createTextShape}><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/> {t("Create")}</button></div>}
+          <input ref={fileRef} className="file-input" type="file" accept={sourceMode==="object"?".obj,.stl":".svg,.png,image/svg+xml,image/png"} onChange={(e) => importFile(e.target.files?.[0])} />
           <input ref={fontRef} className="file-input" type="file" accept=".ttf,.otf,font/ttf,font/otf,application/x-font-ttf,application/x-font-opentype" onChange={event=>{void importFont(event.target.files?.[0]);event.currentTarget.value="";}} />
-          <div className="shape-library" aria-label="Shape library">{shapeItems.map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.demo?<img src={publicAsset("rzw.svg")} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong title={item.name}>{item.name}</strong><small>{item.kind==="text"?item.fontName:t(item.demo?"Demo vector":"Imported image")}</small></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button>}</div>)}</div>
+          <div className="shape-library" aria-label="Shape library">{shapeItems.filter(item=>(item.kind??"image")===sourceMode).map(item=><div key={item.id} className="source-card-wrap"><button className={`source-card ${item.id===activeShapeId?"active":""}`} onClick={()=>selectShape(item.id)}><div className={`source-thumb ${item.kind==="text"?"text-thumb":""}`} style={item.kind==="text"?{fontFamily:item.fontFamily}:undefined}>{item.kind==="object"?<HugeiconsIcon icon={CubeIcon} size={24} aria-hidden="true"/>:item.kind!=="text"&&item.source?<img src={item.source} alt=""/>:item.kind==="text"?<span>{item.text?.slice(0,2)}</span>:<span>{item.name.split(".").pop()?.toUpperCase()}</span>}</div><div><strong title={item.name}>{item.name}</strong></div><span className="ready-dot" title={item.id===activeShapeId?"active":"ready"}/></button>{!item.demo&&<button className="delete-shape" aria-label={`Delete ${item.name}`} title="Delete shape" onClick={()=>deleteShape(item.id)}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button>}</div>)}</div>
           <div className="tip"><HugeiconsIcon icon={InformationCircleIcon} size={14} aria-hidden="true"/><p>{t(sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion.")}</p></div>
+
+        </aside>
           <div className="project-links">
             <a className="support-project" href="https://pay.cloudtips.ru/p/55cf592d" target="_blank" rel="noreferrer"><HugeiconsIcon icon={HeartIcon} size={14} aria-hidden="true"/><strong>{t("Support the project")}</strong></a>
             <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
           </div>
-        </aside>
 
         <section className="stage" aria-label="3D preview">
           <div className="stage-top">
             <div><span>WEBGL LIVE</span><b>{triangles.toLocaleString(language==="ru"?"ru-RU":"en-US")} {t("TRIANGLES")}</b></div>
-            <div className="stage-tools"><div className="language-toggle" aria-label="Language"><button className={language==="en"?"active":""} onClick={()=>setLanguage("en")}>EN</button><button className={language==="ru"?"active":""} onClick={()=>setLanguage("ru")}>RU</button></div><div className="stage-actions"><button onClick={undo} disabled={historyIndexRef.current<=0}><HugeiconsIcon icon={UndoIcon} size={14} aria-hidden="true"/> {t("Undo")}</button><button onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}><HugeiconsIcon icon={RedoIcon} size={14} aria-hidden="true"/> {t("Redo")}</button><button onClick={()=>stageRef.current?.center()} aria-label={t("Center object")}><HugeiconsIcon icon={Target01Icon} size={14} aria-hidden="true"/> {t("Center object")}</button><button onClick={resetView} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/> {t("Reset view")}</button><button onClick={()=>setInterfaceHidden(true)}><HugeiconsIcon icon={ViewOffIcon} size={14} aria-hidden="true"/> {t("Hide UI")}</button></div></div>
+            <div className="stage-tools"><div className="language-toggle" aria-label="Language"><button className={language==="en"?"active":""} onClick={()=>setLanguage("en")}>EN</button><button className={language==="ru"?"active":""} onClick={()=>setLanguage("ru")}>RU</button></div><div className="stage-actions"><button title={t("Undo")} aria-label={t("Undo")} onClick={undo} disabled={historyIndexRef.current<=0}><HugeiconsIcon icon={UndoIcon} size={18} aria-hidden="true"/></button><button title={t("Redo")} aria-label={t("Redo")} onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}><HugeiconsIcon icon={RedoIcon} size={18} aria-hidden="true"/></button><button onClick={()=>stageRef.current?.center()} title={t("Center object")} aria-label={t("Center object")}><HugeiconsIcon icon={Target01Icon} size={18} aria-hidden="true"/></button><button onClick={resetView} title={t("Reset view")} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={18} aria-hidden="true"/></button><button title={t("Hide UI")} aria-label={t("Hide UI")} onClick={()=>setInterfaceHidden(true)}><HugeiconsIcon icon={ViewOffIcon} size={18} aria-hidden="true"/></button></div></div>
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorMode={colorMode} gradientColor={gradientColor} gradientAngle={gradientAngle} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} revolveAngle={revolveAngle} revolveEdge={revolveEdge} inflateAmount={inflateAmount} inflateDirection={inflateDirection} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalMapEnabled?normalStrength:0} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={effect} effectIntensity={effectIntensity} effectBlur={effectBlur} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} demoSpin={Boolean(activeShape?.demo)} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} customMaterialUrl={customMaterialUrl} color={color} colorMode={colorMode} gradientColor={gradientColor} gradientAngle={gradientAngle} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} revolveAngle={revolveAngle} revolveEdge={revolveEdge} inflateAmount={inflateAmount} inflateDirection={inflateDirection} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalMapEnabled?normalStrength:0} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={effect} effectIntensity={effectIntensity} effectBlur={effectBlur} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} gravity={gravity} demoSpin={Boolean(activeShape?.demo&&activeShape.kind!=="object")} onCameraChange={setCameraView} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>{t("Building geometry")}</b><small>{t("Interface stays responsive")}</small></div>}
-            <div className="drag-hint"><span><HugeiconsIcon icon={ArrowLeftRightIcon} size={14} aria-hidden="true"/></span> {t("LMB rotate · RMB pan · Scroll zoom")}</div>
           </div>
           <div className="axis-row">
             {(["x", "y", "z"] as const).map(axis=><div key={axis} className="axis-control" onPointerDown={event=>startAxisDrag(axis,event)} onPointerMove={moveAxisDrag} onPointerUp={endAxisDrag} onPointerCancel={endAxisDrag}><span>{axis.toUpperCase()}</span><input aria-label={`${axis.toUpperCase()} rotation`} type="number" min={-360} max={360} step={1} value={Math.round(rotation[axis]*10)/10} onChange={event=>updateAxis(axis,+event.target.value)}/><i>°</i></div>)}
+            <label className="axis-control camera-control"><span>{language==="ru"?"Зум":"Zoom"}</span><input aria-label="Zoom" type="number" min={0.23} max={7.7} step={0.01} value={cameraView.zoom} onChange={event=>stageRef.current?.setCamera("zoom",event.target.valueAsNumber)}/><i>×</i></label>
+            <label className="axis-control camera-control" title={language==="ru"?"Перспектива: размер объекта в кадре сохраняется":"Perspective: keeps the object framing steady"}><span>{language==="ru"?"Объектив":"Lens"}</span><input aria-label="Focal length" type="number" min={10} max={200} step={1} value={cameraView.focalLength} onChange={event=>stageRef.current?.setCamera("focalLength",event.target.valueAsNumber)}/><i>mm</i></label>
+            <p className="drag-hint">{gravity?(language==="ru"?"ЛКМ — тянуть · ПКМ — перемещение · Колесо — масштаб · G — стоп":"LMB drag · RMB pan · Scroll zoom · G freeze"):t("LMB rotate · RMB pan · Scroll zoom")}</p>
+            <button className="view-reset" onClick={resetView} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={18} aria-hidden="true"/></button>
           </div>
         </section>
 
         <aside className="panel properties-panel">
-          <div className="panel-heading properties-heading"><span>02</span><h2>{t("Properties")}</h2><button className="reset-all" onClick={resetAll}><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/> {t("Reset all")}</button></div>
+          <div className="panel-heading properties-heading"><h2>{t("Properties")}</h2><button className="reset-all" onClick={resetAll}><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/> {t("Reset all")}</button></div>
           <div className="parameter-clipboard"><button onClick={copyParams}>{t("Copy Properties")}</button><button onClick={pasteParams}>{t("Paste Properties")}</button></div>
 
-          <details className="property-section geometry-section" open>
+          {activeShape?.kind!=="object"&&<details className="property-section geometry-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Geometry")}</span><button onClick={(e)=>{e.preventDefault();resetGeometry();}} aria-label="Reset geometry"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
             <div className="section-body stack-controls">
               <div className="geometry-modes" role="group" aria-label="Geometry operation">{(["Extrude","Revolve","Inflate"] as GeometryMode[]).map(mode=><button key={mode} className={geometryMode===mode?"active":""} onClick={()=>setGeometryMode(mode)}><HugeiconsIcon icon={mode==="Extrude"?CubeIcon:mode==="Revolve"?Rotate360Icon:BubblesIcon} size={24} aria-hidden="true"/><span>{t(mode)}</span></button>)}</div>
@@ -651,7 +665,7 @@ function Home() {
               {geometryMode==="Extrude"&&<RangeControl label={t("Mass")} value={mass} min={0} max={250} suffix="%" onChange={setMass}/>}
               {geometryMode==="Inflate"&&<><RangeControl label={t("Inflation")} value={inflateAmount} min={0} max={200} suffix="%" onChange={setInflateAmount}/><OptionToggle label={t("Direction")} value={inflateDirection} options={["Outward","Inward"]} onChange={value=>setInflateDirection(value as InflateDirection)} t={t}/></>}
             </div>
-          </details>
+          </details>}
 
           {activeShape?.kind==="text"&&<details className="property-section typography-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Typography")}</span><button onClick={(e)=>{e.preventDefault();resetTypography();}} aria-label="Reset typography"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
@@ -677,7 +691,7 @@ function Home() {
             </div>
           </details>
 
-          <details className="property-section deform-section" open>
+          {activeShape?.kind!=="object"&&<details className="property-section deform-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Deform")}</span><button onClick={(e)=>{e.preventDefault();resetDeform();}} aria-label="Reset deformation"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
             <div className="section-body deform-grid">
               <RangeControl label={t("Bend")} value={bend} min={-120} max={120} suffix="°" onChange={setBend}/>
@@ -685,7 +699,7 @@ function Home() {
               <RangeControl label={t("Taper")} value={taper} min={-100} max={100} suffix="%" onChange={setTaper}/>
               <RangeControl label={t("Twist")} value={twist} min={-180} max={180} suffix="°" onChange={setTwist}/>
             </div>
-          </details>
+          </details>}
 
           <details className="property-section material-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Material")}</span><button onClick={(e)=>{e.preventDefault();resetMaterial();}} aria-label="Reset material"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
@@ -737,6 +751,7 @@ function Home() {
           <details className="property-section background-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Background")}</span><button onClick={(e)=>{e.preventDefault();resetBackground();}} aria-label="Reset background"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
             <div className="section-body">
+              <label className="switch-row gravity-control"><span>{language==="ru"?"Гравитация":"Gravity"} <kbd>G</kbd></span><input aria-label={language==="ru"?"Гравитация":"Gravity"} type="checkbox" checked={gravity} onChange={event=>setGravity(event.target.checked)}/><i/></label>
               <div className="control-row"><span>{t("Scene")}</span><output>{activeCustomBackground?.name??t(background)}</output></div>
               <div className="backgrounds"><button className={background === "None" ? "active none" : "none"} onClick={() => setBackground("None")}><span><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></span><small>{t("None")}</small></button>{backgrounds.map((item) => <button key={item} className={`${item.toLowerCase()} ${background === item ? "active" : ""}`} onClick={() => setBackground(item)}><span /><small>{t(item)}</small></button>)}{customBackgrounds.map(item=><BackgroundSwatch key={item.id} item={item} selected={background===item.source} onChoose={()=>setBackground(item.source)} onRemove={()=>deleteBackground(item.id)}/>)}<button className="upload-bg" onClick={() => backgroundRef.current?.click()}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/></span><small>{t("Upload")}</small></button></div>
               <input ref={backgroundRef} className="file-input" type="file" accept="image/*" onChange={(e) => {importBackground(e.target.files?.[0]);e.currentTarget.value="";}} />
@@ -746,13 +761,13 @@ function Home() {
       </section>
 
       <footer className="exportbar">
-        <div className="export-title"><span>03</span><div><b>{t("Ready to export")}</b><small>{t(background === "None" ? "Transparent background" : "Background included")} · {t("High quality")}</small></div></div>
+        <div className="export-title"><div><b>{t("Ready to export")}</b></div></div>
         <div className={`export-actions ${effect==="ASCII"?"ascii-export":""}`}>
-          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span><HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true"/></span><div><b>PNG</b><small>{t("Transparent")}</small></div></button>
-          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span><HugeiconsIcon icon={Image01Icon} size={14} aria-hidden="true"/></span><div><b>PNG + BG</b><small>{t(background==="None"?"Studio black":"Scene background")}</small></div></button>
-          <button disabled={embedBusy} onClick={()=>void prepareEmbed()}><span><HugeiconsIcon icon={CodeIcon} size={14} aria-hidden="true"/></span><div><b>{embedBusy?"Preparing…":"Embed"}</b><small>{t("Interactive")}</small></div></button>
-          {effect==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span><HugeiconsIcon icon={TextIcon} size={14} aria-hidden="true"/></span><div><b>TXT</b><small>{t("ASCII graphic")}</small></div></button>}
-          <button className="primary" onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/></span><div><b>OBJ</b><small>{t("3D geometry")}</small></div></button>
+          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span><HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true"/></span><div><b>PNG</b></div></button>
+          <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span><HugeiconsIcon icon={Image01Icon} size={14} aria-hidden="true"/></span><div><b>PNG + BG</b></div></button>
+          <button disabled={embedBusy} onClick={()=>void prepareEmbed()}><span><HugeiconsIcon icon={CodeIcon} size={14} aria-hidden="true"/></span><div><b>{embedBusy?"Preparing…":"Embed"}</b></div></button>
+          {effect==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span><HugeiconsIcon icon={TextIcon} size={14} aria-hidden="true"/></span><div><b>TXT</b></div></button>}
+          <button onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span><HugeiconsIcon icon={CubeIcon} size={14} aria-hidden="true"/></span><div><b>OBJ</b></div></button>
         </div>
       </footer>
 
@@ -763,7 +778,7 @@ function Home() {
         <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
       </section>
 
-      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>{t("Show UI")}</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}><HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true"/> PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}><HugeiconsIcon icon={Image01Icon} size={14} aria-hidden="true"/> PNG + BG</button>{effect==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}><HugeiconsIcon icon={TextIcon} size={14} aria-hidden="true"/> TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/> OBJ</button></div>}
+      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>{t("Show UI")}</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}><HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true"/> PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}><HugeiconsIcon icon={Image01Icon} size={14} aria-hidden="true"/> PNG + BG</button>{effect==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}><HugeiconsIcon icon={TextIcon} size={14} aria-hidden="true"/> TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}><HugeiconsIcon icon={CubeIcon} size={14} aria-hidden="true"/> OBJ</button></div>}
 
       {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) =>e.stopPropagation()}><button className="modal-close" aria-label={t("Close")} onClick={() => setEmbedOpen(false)}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button><span className="eyebrow">{t("INTERACTIVE EMBED")}</span><h3>{t("Put this shape anywhere.")}</h3><p>{t("Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.")}</p><pre data-embed-code={embedCode}>{embedCode.length>900?`${embedCode.slice(0,900)}…`:embedCode}</pre><button className="copy-button" onClick={() => { void navigator.clipboard.writeText(embedCode).then(()=>flash("Embed code copied")); }}>{t("Copy embed code")}</button></div></div>}
       {toast && <div className="toast"><span><HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} aria-hidden="true"/></span>{toast}</div>}

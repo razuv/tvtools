@@ -2,6 +2,9 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
+import { stepGravity } from "./gravity";
+import { parseModel } from "./modelImport";
+import { setCameraView, getCameraView } from "./cameraView";
 import { applyColorGradient, type GradientSettings } from "./gradientMaterial";
 import { useTriplanarMaps } from "./triplanar";
 import { createShaderMaterial, shaderPresets, type ShaderPreset } from "./shaderMaterials";
@@ -17,6 +20,7 @@ import { parse as parseOpenType, type Font, type PathCommand } from "opentype.js
 import { EndType, FillRule, inflatePathsD, JoinType, simplifyPathD, unionD, type PathD } from "clipper2-ts";
 
 export type StageHandle = {
+  setCamera: (kind:"zoom"|"focalLength",value:number) => void;
   reset: () => void;
   center: () => void;
   rotate: (axis: "x" | "y" | "z", amount?: number) => void;
@@ -27,6 +31,7 @@ export type StageHandle = {
 };
 
 type StageProps = GradientSettings & {
+  gravity?:boolean;
   source: string | null;
   fileName: string;
   text?: string;
@@ -80,6 +85,7 @@ type StageProps = GradientSettings & {
   onReady?: (triangles: number) => void;
   onLoading?: (loading: boolean) => void;
   onError?: (message: string) => void;
+  onCameraChange?: (view:{zoom:number;focalLength:number}) => void;
   onRotationChange?: (rotation: {x:number;y:number;z:number}) => void;
 };
 
@@ -650,24 +656,33 @@ function presetBackground(name: string) {
   if (name === "None") return null;
   if (name.startsWith("blob:")||name.startsWith("data:image/")) { const texture = new THREE.TextureLoader().load(name); texture.colorSpace = THREE.SRGBColorSpace; return texture; }
   const canvas = document.createElement("canvas"); canvas.width=1024; canvas.height=1024; const ctx=canvas.getContext("2d")!;
-  const gradients:Record<string,string[]> = { Noir:["#070707","#272727"], Sky:["#9ed8ff","#eaf7ff"], Sunset:["#ff805c","#5c3b99"], Gallery:["#e9e5db","#9b968c"], Acid:["#b7f34a","#12360c"] };
+  const gradients:Record<string,string[]> = { Noir:["#070707","#272727"], Sky:["#b9dbe5","#e0e5e5"], Sunset:["#ff805c","#5c3b99"], Gallery:["#e9e5db","#9b968c"], Acid:["#b7f34a","#12360c"] };
   const colors=gradients[name]??gradients.Noir; const gradient=ctx.createLinearGradient(0,0,1024,1024); gradient.addColorStop(0,colors[0]); gradient.addColorStop(1,colors[1]); ctx.fillStyle=gradient; ctx.fillRect(0,0,1024,1024);
   if(name==="Gallery"){ctx.fillStyle="rgba(255,255,255,.22)";for(let x=0;x<1024;x+=128)ctx.fillRect(x,0,1,1024);}
   const texture=new THREE.CanvasTexture(canvas); texture.colorSpace=THREE.SRGBColorSpace; return texture;
 }
 
+function installGeometry(runtime:Runtime,geometry:THREE.BufferGeometry,current:StageProps) {
+      runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
+      const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(geometry.getAttribute("position").count/3));
+}
+
 export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStage(props, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
+  const physicsRef=useRef({velocity:new THREE.Vector3(),target:null as THREE.Vector3|null});
   const latestPropsRef = useRef(props);
   latestPropsRef.current = props;
 
   useImperativeHandle(ref, () => ({
+    setCamera(kind,value) { const runtime=runtimeRef.current;if(!runtime)return;setCameraView(runtime.camera,runtime.controls.target,kind,value);runtime.controls.update();latestPropsRef.current.onCameraChange?.(getCameraView(runtime.camera,runtime.controls.target)); },
     reset() {
       const runtime = runtimeRef.current; if (!runtime) return;
       runtime.autoRotate=false;
-      runtime.model.rotation.set(0,0,0);
+      runtime.model.rotation.set(0,0,0);runtime.model.position.set(0,0,0);physicsRef.current.velocity.set(0,0,0);physicsRef.current.target=null;
       runtime.camera.position.set(0, 0, 5.4);
+      runtime.camera.fov=36;runtime.camera.updateProjectionMatrix();
+      latestPropsRef.current.onCameraChange?.({zoom:1,focalLength:Math.round(runtime.camera.getFocalLength())});
       runtime.controls.target.set(0, 0, 0); runtime.controls.update();
       latestPropsRef.current.onRotationChange?.({x:0,y:0,z:0});
     },
@@ -757,7 +772,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     host.appendChild(asciiCanvas);
     const asciiSample=document.createElement("canvas");
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .7; controls.maxDistance = 24; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
+    controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .1; controls.maxDistance = 120; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
+    controls.addEventListener("change",()=>latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target)));
     const model = new THREE.Group(); model.rotation.set(0,0,0); scene.add(model);
     const ambient=new THREE.HemisphereLight(0xffffff,0x202020,1.8);scene.add(ambient);
     const key = new THREE.DirectionalLight(0xffffff, 4.2); key.position.set(-3, 5, 5);
@@ -777,10 +793,28 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
     runtimeRef.current = { exporting:false,scene, camera, renderer, composer, effectPass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0;
+    const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),dragPlane=new THREE.Plane(),dragOffset=new THREE.Vector3(),hitPoint=new THREE.Vector3(),bounds=new THREE.Box3();
+    const pointRay=(event:PointerEvent)=>{const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);};
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
-    const pointerDown=(event:PointerEvent)=>{if(event.button!==0)return;rotating=true;lastPointerX=event.clientX;lastPointerY=event.clientY;runtimeRef.current!.autoRotate=false;renderer.domElement.setPointerCapture(event.pointerId);};
-    const pointerMove=(event:PointerEvent)=>{if(!rotating)return;const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;lastPointerX=event.clientX;lastPointerY=event.clientY;model.rotation.y+=dx*.008;model.rotation.x+=dy*.008;emitRotation();};
-    const pointerUp=(event:PointerEvent)=>{if(event.button===0)rotating=false;};
+    const pointerDown=(event:PointerEvent)=>{
+      if(event.button!==0)return;
+      runtimeRef.current!.autoRotate=false;
+      if(latestPropsRef.current.gravity){
+        pointRay(event);const hit=raycaster.intersectObject(model,true)[0];if(!hit)return;
+        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()),hit.point);
+        dragOffset.copy(model.position).sub(hit.point);physicsRef.current.target=model.position.clone();
+      }else rotating=true;
+      lastPointerX=event.clientX;lastPointerY=event.clientY;renderer.domElement.setPointerCapture(event.pointerId);
+    };
+    const pointerMove=(event:PointerEvent)=>{
+      if(latestPropsRef.current.gravity){
+        if(!physicsRef.current.target)return;pointRay(event);
+        if(raycaster.ray.intersectPlane(dragPlane,hitPoint))physicsRef.current.target.copy(hitPoint).add(dragOffset);
+        return;
+      }
+      if(!rotating)return;const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;lastPointerX=event.clientX;lastPointerY=event.clientY;model.rotation.y+=dx*.008;model.rotation.x+=dy*.008;emitRotation();
+    };
+    const pointerUp=(event:PointerEvent)=>{if(event.button===0){rotating=false;physicsRef.current.target=null;}};
     const stopAuto=()=>{if(runtimeRef.current)runtimeRef.current.autoRotate=false;};
     renderer.domElement.addEventListener("pointerdown",pointerDown);
     renderer.domElement.addEventListener("pointermove",pointerMove);
@@ -793,17 +827,21 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       latestPropsRef.current.onLoading?.(false);
       if(event.data.error)return;
       const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(event.data.position,3));geometry.setAttribute("normal",new THREE.BufferAttribute(event.data.normal,3));if(event.data.uv.length)geometry.setAttribute("uv",new THREE.BufferAttribute(event.data.uv,2));geometry.computeBoundingBox();geometry.computeBoundingSphere();
-      runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();}});runtime.model.clear();
-      const current=latestPropsRef.current;const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);current.onReady?.(Math.round(event.data.triangles));
+      installGeometry(runtime,geometry,latestPropsRef.current);
     };
-    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); };
+    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target)); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
-    let frame = 0;const demoStart=performance.now();
+    let frame = 0;const demoStart=performance.now();let lastPhysicsTime=demoStart;
     const loop = (time=0) => {
       controls.update();
       const runtime=runtimeRef.current;
       if(!runtime)return;
       if(runtime.exporting){frame=requestAnimationFrame(loop);return;}
+      const dt=(time-lastPhysicsTime)/1000;lastPhysicsTime=time;
+      if(latestPropsRef.current.gravity&&model.children.length){
+        runtime.autoRotate=false;bounds.setFromObject(model);
+        stepGravity(model.position,physicsRef.current.velocity,physicsRef.current.target,shadowFloor.position.y-(bounds.min.y-model.position.y),dt);
+      }
       model.traverse(child=>{if(child instanceof THREE.Mesh){const material=child.material as THREE.Material;if(material.userData.patternTime)material.userData.patternTime.value=time/1000;}});
       if(runtime.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
       if(latestPropsRef.current.effect==="ASCII"){
@@ -827,10 +865,29 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     return () => { cancelAnimationFrame(frame); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
+  useEffect(()=>{
+    physicsRef.current.velocity.set(0,0,0);physicsRef.current.target=null;
+    if(runtimeRef.current)runtimeRef.current.autoRotate=false;
+  },[props.gravity]);
+  useEffect(()=>{if(runtimeRef.current)runtimeRef.current.model.position.set(0,0,0);physicsRef.current.velocity.set(0,0,0);physicsRef.current.target=null;},[props.source,props.text]);
+
   useEffect(() => {
     let cancelled = false;
     const build = async () => {
       const runtime = runtimeRef.current; if (!runtime) return;
+      const requestId=++runtime.requestId;
+      if(shapeSource&&/\.(obj|stl)$/i.test(shapeFileName)) {
+        onShapeLoading?.(true);
+        try {
+          const response=await fetch(shapeSource);
+          if(!response.ok)throw new Error("Could not read model");
+          const geometry=parseModel(await response.arrayBuffer(),shapeFileName);
+          if(cancelled||runtimeRef.current!==runtime||runtime.requestId!==requestId){geometry.dispose();return;}
+          runtime.autoRotate=false;installGeometry(runtime,geometry,latestPropsRef.current);
+        }catch(error){if(!cancelled)onShapeError?.(error instanceof Error?error.message:"Could not load model");}
+        finally{if(!cancelled)onShapeLoading?.(false);}
+        return;
+      }
       let shapes: THREE.Shape[];
       try { shapes = shapeText?.trim()&&shapeFontUrl ? await textShapes(shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing) : shapeSource ? (shapeFileName.toLowerCase().endsWith(".svg") ? await svgShapes(shapeSource) : await pngShapes(shapeSource, 48 + shapeSegments * 18)) : [polygonShape(demoPoints)]; }
       catch (error) {
@@ -842,7 +899,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       await new Promise(resolve=>window.setTimeout(resolve,70));
       if (cancelled || !runtimeRef.current) return;
       const deforming=Math.abs(shapeMass)+Math.abs(shapeBend)+Math.abs(shapeBulge)+Math.abs(shapeTaper)+Math.abs(shapeTwist)>0;
-      const requestId=++runtime.requestId;const heavy=shapeGeometryMode!=="Extrude"||shapeSegments>=64||(deforming&&shapeSurfaceDetail>=3)||shapeMass>=70||shapeEdge>=180;onShapeLoading?.(heavy);
+      const heavy=shapeGeometryMode!=="Extrude"||shapeSegments>=64||(deforming&&shapeSurfaceDetail>=3)||shapeMass>=70||shapeEdge>=180;onShapeLoading?.(heavy);
       // SVGLoader samples every curve separately, so a nominal value of 256
       // can otherwise create thousands of contour points per ring. Preserve
       // the requested visual detail while bounding the actual ring density.
