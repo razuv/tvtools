@@ -1,15 +1,18 @@
 import * as THREE from "three";
 import {applyImageFill} from "./imageFill.ts";
 
+import {gradientStops,type GradientStop} from "./gradientStops.ts";
+
 export type ColorMode="Solid"|"Linear"|"Radial"|"Angular"|"Image";
-export type GradientSettings={colorMode:ColorMode;gradientColor:string;gradientAngle:number;imageFill?:string;textureRepeat?:number};
+export type GradientSettings={colorMode:ColorMode;gradientColor:string;gradientAngle:number;gradientStops?:GradientStop[];imageFill?:string;textureRepeat?:number};
 
 export function applyColorGradient(material:THREE.Material,bounds:THREE.Box3,color:string,settings:GradientSettings){
   if(settings.colorMode==="Image"){applyImageFill(material,settings.imageFill??"",settings.textureRepeat);return;}
   if(settings.colorMode==="Solid")return;
   const compile=material.onBeforeCompile,cacheKey=material.customProgramCacheKey();
+  const stops=gradientStops(settings.gradientStops,color,settings.gradientColor);
   const minimum=bounds.min.clone(),size=bounds.getSize(new THREE.Vector3()).max(new THREE.Vector3(.0001,.0001,.0001));
-  material.customProgramCacheKey=()=>`${cacheKey}|appearance-gradient`;
+  material.customProgramCacheKey=()=>`${cacheKey}|appearance-gradient-${JSON.stringify(stops)}`;
   material.onBeforeCompile=(shader,renderer)=>{
     compile.call(material,shader,renderer);
     Object.assign(shader.uniforms,{
@@ -18,14 +21,18 @@ export function applyColorGradient(material:THREE.Material,bounds:THREE.Box3,col
       gradientAngle:{value:THREE.MathUtils.degToRad(settings.gradientAngle)},
       gradientMin:{value:minimum},gradientSize:{value:size},
     });
+    stops.forEach((stop,index)=>{shader.uniforms[`gradientStop${index}`]={value:new THREE.Color(stop.color)};});
     shader.vertexShader="varying vec2 vGradientPosition; uniform vec3 gradientMin; uniform vec3 gradientSize;\n"+shader.vertexShader.replace("#include <begin_vertex>","#include <begin_vertex>\nvGradientPosition=(position.xy-gradientMin.xy)/gradientSize.xy-0.5;");
-    shader.fragmentShader="varying vec2 vGradientPosition; uniform vec3 gradientStart; uniform vec3 gradientEnd; uniform float gradientMode; uniform float gradientAngle;\n"+shader.fragmentShader.replace("vec4 diffuseColor = vec4( diffuse, opacity );",`
+    shader.fragmentShader=stops.map((_,index)=>`uniform vec3 gradientStop${index};`).join("\n")+"\n"+"varying vec2 vGradientPosition; uniform vec3 gradientStart; uniform vec3 gradientEnd; uniform float gradientMode; uniform float gradientAngle;\n"+shader.fragmentShader.replace("vec4 diffuseColor = vec4( diffuse, opacity );",`
       vec4 diffuseColor = vec4( diffuse, opacity );
       vec2 direction=vec2(cos(gradientAngle),sin(gradientAngle));
       float gradientT=0.5+dot(vGradientPosition,direction)/max(abs(direction.x)+abs(direction.y),0.0001);
       if(gradientMode>1.5&&gradientMode<2.5)gradientT=length(vGradientPosition)*2.0;
       if(gradientMode>2.5){gradientT=0.0;if(dot(vGradientPosition,vGradientPosition)>0.00000001)gradientT=fract(atan(vGradientPosition.x,vGradientPosition.y)/6.2831853-gradientAngle/6.2831853+1.0);}
-      diffuseColor.rgb=mix(gradientStart,gradientEnd,clamp(gradientT,0.0,1.0));
+      gradientT=clamp(gradientT,0.0,1.0);
+      vec3 gradientResult=gradientStop0;
+      ${stops.slice(1).map((stop,index)=>`gradientResult=mix(gradientResult,gradientStop${index+1},clamp((gradientT-${stops[index].position.toFixed(8)})/${Math.max(.00000001,stop.position-stops[index].position).toFixed(8)},0.0,1.0));`).join("\n")}
+      diffuseColor.rgb=gradientResult;
     `);
   };
 }

@@ -1,3 +1,4 @@
+import {gradientStops} from "./gradientStops.ts";
 import type { GradientSettings } from "./gradientMaterial";
 
 export const backgroundPresets:Record<string,[string,string]>={Noir:["#070707","#272727"],Sky:["#b9dbe5","#e0e5e5"],Sunset:["#ff805c","#5c3b99"],Gallery:["#e9e5db","#9b968c"],Acid:["#b7f34a","#12360c"]};
@@ -6,9 +7,10 @@ export type BackgroundFill=GradientSettings & {color:string};
 
 export function backgroundFillCss(fill:BackgroundFill) {
   if(fill.colorMode==="Solid")return fill.color;
-  if(fill.colorMode==="Linear")return `linear-gradient(${90-fill.gradientAngle}deg,${fill.color},${fill.gradientColor})`;
-  if(fill.colorMode==="Radial")return `radial-gradient(ellipse closest-side,${fill.color},${fill.gradientColor})`;
-  return `conic-gradient(from ${fill.gradientAngle}deg,${fill.color},${fill.gradientColor})`;
+  const colors=gradientStops(fill.gradientStops,fill.color,fill.gradientColor).map(stop=>`${stop.color} ${stop.position*100}%`).join(",");
+  if(fill.colorMode==="Linear")return `linear-gradient(${90-fill.gradientAngle}deg,${colors})`;
+  if(fill.colorMode==="Radial")return `radial-gradient(ellipse closest-side,${colors})`;
+  return `conic-gradient(from ${fill.gradientAngle}deg,${colors})`;
 }
 
 export function paintBackgroundFill(ctx:CanvasRenderingContext2D,fill:BackgroundFill) {
@@ -24,6 +26,6 @@ export function paintBackgroundFill(ctx:CanvasRenderingContext2D,fill:Background
     const x=Math.cos(angle),y=-Math.sin(angle),length=Math.abs(width*x)+Math.abs(height*y);
     gradient=ctx.createLinearGradient((width-x*length)/2,(height-y*length)/2,(width+x*length)/2,(height+y*length)/2);
   }
-  gradient.addColorStop(0,first);gradient.addColorStop(1,second);
+  for(const stop of gradientStops(fill.gradientStops,first,second))gradient.addColorStop(stop.position,stop.color);
   ctx.fillStyle=gradient;ctx.fillRect(0,0,width,height);
 }

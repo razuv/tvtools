@@ -2,7 +2,7 @@
 
 import { waitForImageFill } from "./imageFill";
 import { TouchGesture } from "./touchGesture";
-import { renderQuality,frameInterval,type FrameLimit } from "./renderQuality";
+import { renderQuality,frameInterval,type FrameLimit,type QualityLevel } from "./renderQuality";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
@@ -10,6 +10,7 @@ import { addEffectPipeline } from "./backgroundComposite";
 import { addFurShells, removeFurShells } from "./furMaterial";
 import { ModelPhysics } from "./gravity";
 import { backgroundPresets, paintBackgroundFill, type BackgroundFill } from "./backgroundFill";
+import {deformModel} from "./deformation";
 import { parseModel } from "./modelImport";
 import { setCameraView, getCameraView } from "./cameraView";
 import { applyColorGradient, type GradientSettings } from "./gradientMaterial";
@@ -17,6 +18,8 @@ import { useTriplanarMaps } from "./triplanar";
 import { createShaderMaterial, shaderPresets, type ShaderPreset } from "./shaderMaterials";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
+import {exportFbx} from "./modelExport";
+import {USDZExporter} from "three/addons/exporters/USDZExporter.js";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
@@ -31,12 +34,13 @@ export type StageHandle = {
   rotate: (axis: "x" | "y" | "z", amount?: number) => void;
   setRotation: (axis: "x" | "y" | "z", degrees: number) => void;
   exportPng: (name: string, withBackground?: boolean) => void;
-  exportObj: (name: string) => void;
+  exportModel: (name:string,format:"OBJ"|"FBX"|"USDZ") => Promise<boolean>;
   exportTxt: (name: string) => void;
 };
 
 type StageProps = GradientSettings & {
   fpsLimit?:FrameLimit;
+  qualityLevel?:QualityLevel;
   gravity?:boolean;
   interactive?:boolean;
   furLength?:number;
@@ -740,11 +744,20 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         runtime.exporting=false;
       }
     },
-    exportObj(name) {
-      const runtime = runtimeRef.current; if (!runtime) return;
-      const exportModel=runtime.model.clone();exportModel.traverse(child=>{if(child.userData.furShell)child.removeFromParent();});
-      const text = new OBJExporter().parse(exportModel);
-      downloadBlob(new Blob([text], { type:"text/plain" }), `${name}.obj`);
+    async exportModel(name,format) {
+      const runtime=runtimeRef.current;if(!runtime)return false;
+      try{
+        const model=runtime.model.clone();model.traverse(child=>{if(child.userData.furShell)child.removeFromParent();});
+        model.updateMatrixWorld(true);
+        if(format==="USDZ"){
+          const data=await new USDZExporter().parseAsync(model);
+          downloadBlob(new Blob([data as Uint8Array<ArrayBuffer>],{type:"model/vnd.usdz+zip"}),`${name}.usdz`);
+        }else{
+          const data=format==="FBX"?exportFbx(model):new OBJExporter().parse(model);
+          downloadBlob(new Blob([data],{type:"text/plain"}),`${name}.${format.toLowerCase()}`);
+        }
+        return true;
+      }catch{latestPropsRef.current.onError?.(`Could not export ${format}`);return false;}
     },
     exportTxt(name) {
       const runtime=runtimeRef.current;if(!runtime)return;
@@ -764,7 +777,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 100);
     camera.position.set(0,0,latestPropsRef.current.demoSpin?6.15:5.4);
     const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
-    const quality=renderQuality({pixelRatio:window.devicePixelRatio,cores:navigator.hardwareConcurrency,memory:(navigator as Navigator & {deviceMemory?:number}).deviceMemory,mobile:matchMedia("(pointer:coarse)").matches});
+    const quality=renderQuality({level:latestPropsRef.current.qualityLevel,pixelRatio:window.devicePixelRatio,cores:navigator.hardwareConcurrency,memory:(navigator as Navigator & {deviceMemory?:number}).deviceMemory,mobile:matchMedia("(pointer:coarse)").matches});
     renderer.setPixelRatio(quality.pixelRatio);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -908,6 +921,22 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     return () => { cancelAnimationFrame(frame);model.children.forEach(child=>{if(child instanceof THREE.Mesh)removeFurShells(child);}); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("lostpointercapture",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
+  useEffect(()=>{
+    const runtime=runtimeRef.current,host=hostRef.current;
+    if(!runtime||!host)return;
+    const quality=renderQuality({level:props.qualityLevel,pixelRatio:window.devicePixelRatio,cores:navigator.hardwareConcurrency,memory:(navigator as Navigator & {deviceMemory?:number}).deviceMemory,mobile:matchMedia("(pointer:coarse)").matches});
+    runtime.quality=quality;
+    runtime.renderer.setPixelRatio(quality.pixelRatio);
+    runtime.composer.setPixelRatio(quality.pixelRatio);
+    const {width,height}=host.getBoundingClientRect();
+    runtime.renderer.setSize(width,height,false);runtime.composer.setSize(width,height);
+    const drawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());runtime.backgroundTarget.setSize(drawing.x,drawing.y);
+    runtime.key.shadow.mapSize.set(quality.shadowSize,quality.shadowSize);
+    runtime.key.shadow.map?.dispose();runtime.key.shadow.map=null;
+    setFurQuality(runtime,latestPropsRef.current,quality.furLayers);
+    runtime.dirty=true;
+  },[props.qualityLevel]);
+
   useEffect(()=>{if(runtimeRef.current)runtimeRef.current.dirty=true;});
 
   useEffect(()=>{if(runtimeRef.current)runtimeRef.current.controls.enabled=props.interactive!==false;},[props.interactive]);
@@ -928,7 +957,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         try {
           const response=await fetch(shapeSource);
           if(!response.ok)throw new Error("Could not read model");
-          const geometry=parseModel(await response.arrayBuffer(),shapeFileName);
+          const geometry=deformModel(parseModel(await response.arrayBuffer(),shapeFileName),{bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
           if(cancelled||runtimeRef.current!==runtime||runtime.requestId!==requestId){geometry.dispose();return;}
           runtime.autoRotate=false;installGeometry(runtime,geometry,latestPropsRef.current);
         }catch(error){if(!cancelled)latestPropsRef.current.onError?.(error instanceof Error?error.message:"Could not load model");}
@@ -961,7 +990,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
     runtime.model.children.forEach((child) => { if (child instanceof THREE.Mesh) { removeFurShells(child);const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props);if(props.material==="Fur")addFurShells(child,props.color,props.colorOpacity/100,props.furLength??35,props.furDensity??120,props,runtime.quality.furLayers); old.dispose(); } });
-  }, [props.imageFill,props.furLength,props.furDensity,props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
+  }, [props.gradientStops,props.imageFill,props.furLength,props.furDensity,props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);
 

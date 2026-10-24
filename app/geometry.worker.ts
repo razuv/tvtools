@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import {xyDeformer} from "./deformation.ts";
 import * as THREE from "three";
 import * as poly2tri from "poly2tri";
 import { mergeVertices, toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
@@ -191,14 +192,9 @@ function build(data:GeometryRequest){
   const winding=geometry.index!;for(let i=0;i<winding.count;i+=3){const second=winding.getX(i+1);winding.setX(i+1,winding.getX(i+2));winding.setX(i+2,second);}
   const deformationContours=normalized.contours.map(shape=>({outer:shape.outer.map(([x,y])=>[x*scale,-y*scale]),holes:shape.holes.map(ring=>ring.map(([x,y])=>[x*scale,-y*scale]))}));
   if(active&&!uniformInflate){const divisions=isInflate?6+Math.round(data.surfaceDetail)*7:data.surfaceDetail;geometry=subdivideShell(geometry,divisions,isInflate?600000:160000,isInflate?42:5);}
-  geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute,mappingUv=geometry.attributes.uv as THREE.BufferAttribute|undefined;const mass=isInflate?0:data.mass/100,bend=THREE.MathUtils.degToRad(data.bend),twist=THREE.MathUtils.degToRad(data.twist);
+  geometry=mergeVertices(geometry,isInflate?1e-5:1e-4);geometry.computeBoundingBox();const box=geometry.boundingBox!;const hx=Math.max(.001,(box.max.x-box.min.x)/2),hy=Math.max(.001,(box.max.y-box.min.y)/2),hz=Math.max(.00001,(box.max.z-box.min.z)/2);const cx=(box.min.x+box.max.x)/2,cy=(box.min.y+box.max.y)/2,cz=(box.min.z+box.max.z)/2;const position=geometry.attributes.position as THREE.BufferAttribute,mappingUv=geometry.attributes.uv as THREE.BufferAttribute|undefined;const mass=isInflate?0:data.mass/100;
   const inflateAmplitude=Math.max(.001,data.inflateAmount/100*.72),inflateFalloff=Math.min(.48,Math.max(.07,Math.min(normalized.size.x,normalized.size.y)*scale*.2));
-  const deformXY=(sourceX:number,sourceY:number)=>{
-    const xn=THREE.MathUtils.clamp((sourceX-cx)/hx,-1,1),yn=THREE.MathUtils.clamp((sourceY-cy)/hy,-1,1);let x=cx+(sourceX-cx)*(1+data.bulge/100*(1-yn*yn)*.36)*(1+data.taper/100*yn*.38)*(1+mass*.08),y=cy+(sourceY-cy)*(1+data.bulge/100*(1-xn*xn)*.18)*(1+mass*.08);
-    if(Math.abs(bend)>.001)x+=Math.sin(yn*Math.PI*.5)*hx*bend*.25;
-    if(Math.abs(twist)>.001){const angle=twist*yn*.34,c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dy=y-cy;x=cx+dx*c-dy*s;y=cy+dx*s+dy*c;}
-    return [x,y];
-  };
+  const deformXY=xyDeformer(box,data,mass);
   for(let i=0;i<position.count;i++){
     const sourceX=position.getX(i),sourceY=position.getY(i),[x,y]=deformXY(sourceX,sourceY);let z=position.getZ(i);const zn=THREE.MathUtils.clamp((z-cz)/hz,-1,1),radial=Math.max(0,1-Math.pow((sourceX-cx)/hx,2)-Math.pow((sourceY-cy)/hy,2));
     if(isInflate){

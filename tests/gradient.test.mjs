@@ -25,7 +25,7 @@ test('all gradients normalize to the object bounds including flat geometry',()=>
     assert.ok(shader.uniforms.gradientStart.value.equals(new THREE.Color('#ff0000')));
     assert.ok(shader.uniforms.gradientEnd.value.equals(new THREE.Color('#0000ff')));
     assert.ok(shader.uniforms.gradientSize.value.z>0);
-    assert.match(shader.fragmentShader,/mix\(gradientStart,gradientEnd/);
+    assert.match(shader.fragmentShader,/gradientResult=mix/);
   }
 });
 
@@ -37,4 +37,21 @@ test('gradients retain procedural and triplanar material behavior',()=>{
   useTriplanarMaps(mapped);applyColorGradient(mapped,bounds,'#ff0000',{...settings,colorMode:'Radial'});
   const second=compile(mapped);assert.ok(second.uniforms.uTriplanarTransform);assert.ok(second.uniforms.gradientMode);
   assert.match(second.fragmentShader,/texture2D\(map,uvX\)/);
+});
+
+test('multiple stops reach the material shader at their configured positions',()=>{
+  const material=new THREE.MeshPhysicalMaterial();
+  applyColorGradient(material,bounds,'#ff0000',{...settings,colorMode:'Linear',gradientStops:[{position:0,color:'#FF0000'},{position:.4,color:'#00FF00'},{position:1,color:'#0000FF'}]});
+  const shader=compile(material);
+  assert.ok(shader.uniforms.gradientStop1.value.equals(new THREE.Color('#00FF00')));
+  assert.match(shader.fragmentShader,/gradientT-0.40000000/);
+  assert.match(shader.fragmentShader,/gradientStop2/);
+});
+
+test('dragged gradient points follow the preview and stop at its edges',async()=>{
+  const {gradientStopPosition}=await import('../app/gradientStops.ts');
+  assert.equal(gradientStopPosition(150,100,200),.25);
+  assert.equal(gradientStopPosition(0,100,200),0);
+  assert.equal(gradientStopPosition(500,100,200),1);
+  assert.equal(gradientStopPosition(100,100,0),0);
 });
