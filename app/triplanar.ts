@@ -2,8 +2,12 @@ import * as THREE from "three";
 
 /** Project onto three object-space planes, so Inflate never inherits a pinched UV field. */
 export function useTriplanarMaps(material:THREE.MeshStandardMaterial){
-  material.customProgramCacheKey=()=>"inflate-triplanar-v1";
-  material.onBeforeCompile=shader=>{
+  if(material.userData.triplanarApplied)return;
+  material.userData.triplanarApplied=true;
+  const compile=material.onBeforeCompile,key=material.customProgramCacheKey();
+  material.customProgramCacheKey=()=>`${key}|inflate-triplanar-v1`;
+  material.onBeforeCompile=(shader,renderer)=>{
+    compile.call(material,shader,renderer);
     const map=material.map!;map.updateMatrix();
     shader.uniforms.uTriplanarTransform={value:map.matrix};
     const varyings="varying vec3 vTexturePosition; varying vec3 vTextureNormal;\n";

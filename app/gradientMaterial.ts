@@ -1,9 +1,11 @@
 import * as THREE from "three";
+import {applyImageFill} from "./imageFill.ts";
 
-export type ColorMode="Solid"|"Linear"|"Radial"|"Angular";
-export type GradientSettings={colorMode:ColorMode;gradientColor:string;gradientAngle:number};
+export type ColorMode="Solid"|"Linear"|"Radial"|"Angular"|"Image";
+export type GradientSettings={colorMode:ColorMode;gradientColor:string;gradientAngle:number;imageFill?:string;textureRepeat?:number};
 
 export function applyColorGradient(material:THREE.Material,bounds:THREE.Box3,color:string,settings:GradientSettings){
+  if(settings.colorMode==="Image"){applyImageFill(material,settings.imageFill??"",settings.textureRepeat);return;}
   if(settings.colorMode==="Solid")return;
   const compile=material.onBeforeCompile,cacheKey=material.customProgramCacheKey();
   const minimum=bounds.min.clone(),size=bounds.getSize(new THREE.Vector3()).max(new THREE.Vector3(.0001,.0001,.0001));
@@ -12,7 +14,7 @@ export function applyColorGradient(material:THREE.Material,bounds:THREE.Box3,col
     compile.call(material,shader,renderer);
     Object.assign(shader.uniforms,{
       gradientStart:{value:new THREE.Color(color)},gradientEnd:{value:new THREE.Color(settings.gradientColor)},
-      gradientMode:{value:{Linear:1,Radial:2,Angular:3}[settings.colorMode as Exclude<ColorMode,"Solid">]},
+      gradientMode:{value:{Linear:1,Radial:2,Angular:3}[settings.colorMode as Exclude<ColorMode,"Solid"|"Image">]},
       gradientAngle:{value:THREE.MathUtils.degToRad(settings.gradientAngle)},
       gradientMin:{value:minimum},gradientSize:{value:size},
     });

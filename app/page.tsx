@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Copy01Icon, ClipboardPasteIcon, FloppyDiskIcon, AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, ViewIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
+import { Copy01Icon, ClipboardPasteIcon, FloppyDiskIcon, AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, GravityIcon, ViewOffIcon, ViewIcon, Target01Icon, Settings01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
+import { savedFrameLimit, type FrameLimit } from "./renderQuality";
+import { initialLanguage } from "./language";
 import { ColorSpectrum } from "./ColorSpectrum";
 import { nextPresetName } from "./presetNames";
 import { captionOpacity, captionInk, type RGB } from "./contrast";
@@ -20,14 +22,15 @@ type InflateDirection = "Outward" | "Inward";
 type PostEffect = "Thermal" | "ASCII" | "None" | "Cartoon" | "Sketch" | "Halftone" | "Pixelate" | "Chromatic" | "Duotone" | "Dither";
 type AsciiCharacterSet = "Letters" | "Numbers" | "Letters + Numbers" | "Arrows & Chevrons" | "Math & Symbols" | "Custom Set";
 type Language = "en" | "ru";
-type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;revolveAngle:number;revolveEdge:RevolveEdge;inflateAmount:number;inflateDirection:InflateDirection;bend:number;bulge:number;taper:number;twist:number;fontWeight:number;letterSpacing:number;lineSpacing:number;material:Material;furLength:number;furDensity:number;color:string;colorMode:ColorMode;gradientColor:string;gradientAngle:number;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;normalMapEnabled:boolean;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string;effect:PostEffect;effectIntensity:number;effectBlur:number;effectBackground:boolean;duotoneDarkColor:string;duotoneColor:string };
+type ShapeParams = { geometryMode:GeometryMode;thickness:number;segments:number;surfaceDetail:number;edge:number;mass:number;revolveAngle:number;revolveEdge:RevolveEdge;inflateAmount:number;inflateDirection:InflateDirection;bend:number;bulge:number;taper:number;twist:number;fontWeight:number;letterSpacing:number;lineSpacing:number;material:Material;furLength:number;furDensity:number;color:string;colorMode:ColorMode;imageFill:string;gradientColor:string;gradientAngle:number;colorOpacity:number;roughness:number;textureRepeat:number;textureRotation:number;textureTint:number;normalStrength:number;normalMapEnabled:boolean;glassIor:number;glassTransparency:number;asciiCharacters:number;asciiCharacterSet:AsciiCharacterSet;asciiCustomSet:string;effect:PostEffect;effectIntensity:number;effectBlur:number;effectBackground:boolean;duotoneDarkColor:string;duotoneColor:string };
 type ShapeItem = { id:string; name:string; source:string|null; blob?:Blob; demo?:boolean; params?:ShapeParams; kind?:"image"|"text"|"object"; text?:string; fontUrl?:string; fontName?:string; fontFamily?:string; fontBlob?:Blob };
 type FontOption = { id:string; name:string; family:string; url:string; blob?:Blob; custom?:boolean };
 type CustomMaterial = { id:string; name:string; blob:Blob; source:string; width:number; height:number };
 type CustomBackground = { id:string; name:string; blob:Blob; source:string };
 type StoredShapeItem = Omit<ShapeItem,"source">;
 type StoredCustomMaterial = Omit<CustomMaterial,"source">;
-type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[] };
+type FillImage={id:string;name:string;source:string};
+type StoredLibrary = { version:1; activeShapeId:string; items:StoredShapeItem[]; materials?:StoredCustomMaterial[];imageFills?:FillImage[] };
 type EmbedPayload = {
   version:1;
   shape:{fileName:string;source:string|null;text?:string;fontUrl?:string};
@@ -39,7 +42,7 @@ type EmbedPayload = {
 
 type SavedPreset={id:string;name:string;params:ShapeParams;scene:EmbedPayload["scene"]};
 
-const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,revolveAngle:360,revolveEdge:"Outer",inflateAmount:55,inflateDirection:"Outward",bend:0,bulge:0,taper:0,twist:0,fontWeight:400,letterSpacing:0,lineSpacing:118,material:"Gloss",furLength:35,furDensity:120,color:"#E0E0E0",colorMode:"Solid",gradientColor:"#6C5CE7",gradientAngle:0,colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,normalMapEnabled:true,glassIor:1.5,glassTransparency:100,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@",effect:"None",effectIntensity:70,effectBlur:4,effectBackground:false,duotoneDarkColor:"#090C13",duotoneColor:"#FF7A45"};
+const defaultShapeParams:ShapeParams={geometryMode:"Extrude",thickness:42,segments:18,surfaceDetail:3,edge:24,mass:0,revolveAngle:360,revolveEdge:"Outer",inflateAmount:55,inflateDirection:"Outward",bend:0,bulge:0,taper:0,twist:0,fontWeight:400,letterSpacing:0,lineSpacing:118,material:"Gloss",furLength:35,furDensity:120,color:"#E0E0E0",colorMode:"Solid",imageFill:"",gradientColor:"#6C5CE7",gradientAngle:0,colorOpacity:100,roughness:18,textureRepeat:2,textureRotation:0,textureTint:0,normalStrength:135,normalMapEnabled:true,glassIor:1.5,glassTransparency:100,asciiCharacters:128,asciiCharacterSet:"Letters + Numbers",asciiCustomSet:" .:-=+*#%@",effect:"None",effectIntensity:70,effectBlur:4,effectBackground:false,duotoneDarkColor:"#090C13",duotoneColor:"#FF7A45"};
 
 function blobToDataUrl(blob:Blob){
   return new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
@@ -72,7 +75,7 @@ async function decodeEmbedPayload(value:string){
 }
 
 const ru:Record<string,string>={
-  "Fur":"Шерсть","Hair length":"Длина ворса","Hair density":"Густота ворса",
+  "Gradient":"Градиент","Fur":"Шерсть","Hair length":"Длина ворса","Hair density":"Густота ворса",
   "Imported model":"Импортированная модель","Create":"Создать","Source":"Источник","Image":"Изображение","Text":"Текст","Drop your shape":"Перетащите фигуру","Figma: Copy as SVG or PNG, then paste":"Figma: Copy as SVG или PNG, затем вставьте","Font":"Шрифт","Google Fonts":"Google Fonts","Custom Fonts":"Свои шрифты","Upload font":"Загрузить шрифт","TTF / OTF · max 12 MB":"TTF / OTF · до 12 МБ","Create text shape":"Создать текстовую фигуру","Demo vector":"Демо-вектор","Imported image":"Импортированное изображение",
   "Text becomes real editable 3D outlines, including counters inside letters.":"Текст преобразуется в редактируемые 3D-контуры, включая полости внутри букв.","Transparent shapes with clean edges give the best extrusion.":"Прозрачные фигуры с чистыми краями дают лучший результат экструзии.","Support the project":"Поддержать проект",
   "Undo":"Отменить","Redo":"Повторить","Reset view":"Сбросить вид","Center object":"Вернуть в центр","Hide UI":"Скрыть UI","Show UI":"Показать UI","TRIANGLES":"ТРЕУГОЛЬНИКОВ","Building geometry":"Создание геометрии","Interface stays responsive":"Интерфейс остаётся доступным","LMB rotate · RMB pan · Scroll zoom":"ЛКМ — вращение · ПКМ — перемещение · Колесо — масштаб",
@@ -260,6 +263,7 @@ function EmbedViewer(){
   const [error,setError]=useState("");
   const stageRef=useRef<StageHandle>(null);
   const rotationApplied=useRef(false);
+  const [fpsLimit]=useState(savedFrameLimit);
   const [gravity,setGravity]=useState(false);
   useEffect(()=>{const keyDown=(event:KeyboardEvent)=>{if(payload?.controls?.gravity===false||event.code!=="KeyG"||event.repeat||event.metaKey||event.ctrlKey||event.altKey)return;event.preventDefault();setGravity(value=>!value);};window.addEventListener("keydown",keyDown);return()=>window.removeEventListener("keydown",keyDown);},[payload]);
   useEffect(()=>{let cancelled=false;decodeEmbedPayload(window.location.hash.slice(1)).then(value=>{if(!cancelled){setPayload(value);setGravity(value.scene.gravity??false);}}).catch(()=>{if(!cancelled)setError("This embed link is invalid or incomplete.");});return()=>{cancelled=true;};},[]);
@@ -269,13 +273,13 @@ function EmbedViewer(){
   const p=migrateAppearance(payload.params),s=payload.scene;
   const glyphs=p.asciiCharacterSet==="Custom Set"?p.asciiCustomSet:(asciiCharacterSets[p.asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   return <main className="embed-shell" data-background={s.background} onPointerDown={()=>window.focus()}>
-    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} furLength={p.furLength??35} furDensity={p.furDensity??120} customMaterialUrl={payload.customMaterialUrl} color={p.color} colorMode={p.colorMode??"Solid"} gradientColor={p.gradientColor??"#6C5CE7"} gradientAngle={p.gradientAngle??0} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} revolveAngle={p.revolveAngle??360} revolveEdge={p.revolveEdge??"Outer"} inflateAmount={p.inflateAmount} inflateDirection={p.inflateDirection??"Outward"} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalMapEnabled===false?0:p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.effect} effectIntensity={p.effectIntensity} effectBlur={p.effectBlur??4} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} backgroundFill={s.backgroundFill} gravity={gravity} interactive={payload.controls?.interactive} onReady={applyRotation}/>
+    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} furLength={p.furLength??35} furDensity={p.furDensity??120} customMaterialUrl={payload.customMaterialUrl} color={p.color} imageFill={p.imageFill} colorMode={p.colorMode??"Solid"} gradientColor={p.gradientColor??"#6C5CE7"} gradientAngle={p.gradientAngle??0} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} revolveAngle={p.revolveAngle??360} revolveEdge={p.revolveEdge??"Outer"} inflateAmount={p.inflateAmount} inflateDirection={p.inflateDirection??"Outward"} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalMapEnabled===false?0:p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.effect} effectIntensity={p.effectIntensity} effectBlur={p.effectBlur??4} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} backgroundFill={s.backgroundFill} fpsLimit={fpsLimit} gravity={gravity} interactive={payload.controls?.interactive} onReady={applyRotation}/>
     <a className="embed-brand" href={new URL(import.meta.env.BASE_URL,window.location.origin).href} target="_blank" rel="noreferrer"><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
   </main>;
 }
 
 function Home() {
-  const [language,setLanguage]=useState<Language>("en");
+  const [language,setLanguage]=useState<Language>(()=>{try{return initialLanguage(matchMedia("(max-width:700px), (pointer:coarse)").matches,navigator.languages,localStorage.getItem("playtools-language"));}catch{return initialLanguage(matchMedia("(max-width:700px), (pointer:coarse)").matches,navigator.languages,null);}});
   const [shapeItems, setShapeItems] = useState<ShapeItem[]>([demoShape,demoModel]);
   const [customMaterials,setCustomMaterials]=useState<CustomMaterial[]>([]);
   const [activeShapeId, setActiveShapeId] = useState("demo-rzw");
@@ -320,7 +324,11 @@ function Home() {
   const [textureRepeat, setTextureRepeat] = useState(2);
   const [textureRotation, setTextureRotation] = useState(0);
   const [textureTint, setTextureTint] = useState(0);
+  const [imageFill,setImageFill]=useState("");
+  const [imageFills,setImageFills]=useState<FillImage[]>([]);
   const [colorMode,setColorMode]=useState<ColorMode>(demoShapeParams.colorMode);
+  const lastGradientMode=useRef<ColorMode>("Linear");
+  useEffect(()=>{if(colorMode!=="Solid"&&colorMode!=="Image")lastGradientMode.current=colorMode;},[colorMode]);
   const [gradientColor,setGradientColor]=useState("#6C5CE7");
   const [gradientAngle,setGradientAngle]=useState(0);
   const [furLength,setFurLength]=useState(35);
@@ -358,12 +366,16 @@ function Home() {
   const [isRendering, setIsRendering] = useState(false);
   const [interfaceHidden, setInterfaceHidden] = useState(false);
   const [mobilePanel,setMobilePanel]=useState("preview");
+  const [infoOpen,setInfoOpen]=useState(false);
+  const [fpsLimit,setFpsLimit]=useState<FrameLimit>(savedFrameLimit);
+  useEffect(()=>{try{localStorage.setItem("playtools-fps-limit",String(fpsLimit));}catch{/* Browser storage may be disabled. */}},[fpsLimit]);
   const [, setHistoryTick] = useState(0);
   const stageRef = useRef<StageHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const fontRef = useRef<HTMLInputElement>(null);
   const backgroundRef = useRef<HTMLInputElement>(null);
   const materialRef=useRef<HTMLInputElement>(null);
+  const imageFillRef=useRef<HTMLInputElement>(null);
   const axisDragRef = useRef<{axis:"x"|"y"|"z";startX:number;startValue:number}|null>(null);
   const clipboardRef = useRef<ShapeParams|null>(null);
   const historyRef = useRef<ShapeParams[]>([]);
@@ -388,7 +400,7 @@ function Home() {
   const fileName=activeShape?.name??"shape.svg";
   const t=useCallback((value:string)=>language==="ru"?(ru[value]??value):value,[language]);
   const flash=useCallback((message:string)=>{setToast(t(message));window.setTimeout(()=>setToast(""),2200);},[t]);
-  const currentParams:ShapeParams={furLength,furDensity,geometryMode,thickness,segments,surfaceDetail,edge,mass,revolveAngle,revolveEdge,inflateAmount,inflateDirection,bend,bulge,taper,twist,fontWeight,letterSpacing,lineSpacing,material,color,colorMode,gradientColor,gradientAngle,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,normalMapEnabled,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet,effect,effectIntensity,effectBlur,effectBackground,duotoneDarkColor,duotoneColor};
+  const currentParams:ShapeParams={furLength,furDensity,geometryMode,thickness,segments,surfaceDetail,edge,mass,revolveAngle,revolveEdge,inflateAmount,inflateDirection,bend,bulge,taper,twist,fontWeight,letterSpacing,lineSpacing,material,color,colorMode,imageFill,gradientColor,gradientAngle,colorOpacity,roughness,textureRepeat,textureRotation,textureTint,normalStrength,normalMapEnabled,glassIor,glassTransparency,asciiCharacters,asciiCharacterSet,asciiCustomSet,effect,effectIntensity,effectBlur,effectBackground,duotoneDarkColor,duotoneColor};
   const asciiGlyphs=asciiCharacterSet==="Custom Set"?asciiCustomSet:(asciiCharacterSets[asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
   const activeCustomMaterial=customMaterials.find(item=>material===`Custom:${item.id}`);
   const activeCustomBackground=customBackgrounds.find(item=>item.source===background);
@@ -400,8 +412,8 @@ function Home() {
   useEffect(()=>setSelectedPreset(""),[activeShapeId]);
   const paramsSignature=JSON.stringify(currentParams);
 
-  useEffect(()=>{const saved=window.localStorage.getItem("playtools-language");if(saved!=="ru"&&saved!=="en")return;const timer=window.setTimeout(()=>setLanguage(saved),0);return()=>window.clearTimeout(timer);},[]);
-  useEffect(()=>{window.localStorage.setItem("playtools-language",language);document.documentElement.lang=language;},[language]);
+  useEffect(()=>{const media=matchMedia("(max-width:700px), (pointer:coarse)");const update=()=>{let saved=null;try{saved=localStorage.getItem("playtools-language");}catch{saved=null;}setLanguage(initialLanguage(media.matches,navigator.languages,saved));};media.addEventListener("change",update);window.addEventListener("languagechange",update);return()=>{media.removeEventListener("change",update);window.removeEventListener("languagechange",update);};},[]);
+  useEffect(()=>{if(!matchMedia("(max-width:700px), (pointer:coarse)").matches){try{localStorage.setItem("playtools-language",language);}catch{/* Browser storage may be disabled. */}}document.documentElement.lang=language;},[language]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -425,6 +437,7 @@ function Home() {
       const restoredFonts=[...restoredFontMap.values()];
       restoredFonts.forEach(font=>{const face=new FontFace(font.family,`url("${font.url}")`);face.load().then(loaded=>document.fonts.add(loaded)).catch(()=>{});});
       const restoredMaterials=(saved?.materials??[]).map(item=>({...item,source:URL.createObjectURL(item.blob)}));
+      setImageFills((Array.isArray(saved?.imageFills)?saved.imageFills:[]).filter(item=>typeof item.id==="string"&&typeof item.name==="string"&&typeof item.source==="string"&&/^data:image\/(png|jpeg|webp);base64,/.test(item.source)));
       const items=[demoShape,demoModel,...restored];
       const target=items.find(item=>item.id===(saved?.activeShapeId==="demo-teapot"?demoModel.id:saved?.activeShapeId))??items[0];
       setShapeItems(items);setCustomFonts(restoredFonts);setCustomMaterials(restoredMaterials);setActiveShapeId(target.id);setSourceMode(target.kind??"image");
@@ -449,13 +462,13 @@ function Home() {
     const timer=window.setTimeout(()=>{
       const items:StoredShapeItem[]=shapeItems.filter(item=>!item.demo).map(({source:_,...item})=>item);
       const materials:StoredCustomMaterial[]=customMaterials.map(({source:_,...item})=>item);
-      const snapshot:StoredLibrary={version:1,activeShapeId,items,materials};
+      const snapshot:StoredLibrary={version:1,activeShapeId,items,materials,imageFills};
       cacheWriteRef.current=cacheWriteRef.current.catch(()=>{}).then(()=>writeStoredLibrary(snapshot)).then(()=>{cacheErrorRef.current=false;}).catch(()=>{
         if(!cacheErrorRef.current){cacheErrorRef.current=true;flash("Could not cache the shape library");}
       });
     },250);
     return()=>window.clearTimeout(timer);
-  },[shapeItems,customMaterials,activeShapeId,libraryReady,flash]);
+  },[shapeItems,customMaterials,imageFills,activeShapeId,libraryReady,flash]);
 
   const importFile = useCallback(async (file?: File,successMessage="Shape added to the library") => {
     if (!file) return;
@@ -572,6 +585,16 @@ function Home() {
     }catch{flash("Could not read this JPG");}
   };
 
+  const importImageFill=async(file?:File)=>{
+    if(!file)return;
+    if(!["image/png","image/jpeg","image/webp"].includes(file.type)){flash(language==="ru"?"Выберите PNG, JPG или WebP":"Choose PNG, JPG or WebP");return;}
+    if(file.size>8*1024*1024){flash("Material is larger than 8 MB");return;}
+    try{
+      const bitmap=await createImageBitmap(file);
+      try{const scale=Math.min(1,1024/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext("2d");if(!ctx)throw Error("Image canvas unavailable");ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);const source=canvas.toDataURL("image/webp",.9);setImageFills(items=>[...items,{id:crypto.randomUUID(),name:file.name,source}]);setImageFill(source);setColorMode("Image");}finally{bitmap.close();}
+    }catch{flash(language==="ru"?"Не удалось открыть изображение":"Could not read image");}
+  };
+
   const resetView = () => {
     setRotation({ x: 0, y: 0, z: 0 });
     stageRef.current?.reset();
@@ -581,7 +604,7 @@ function Home() {
   const moveAxisDrag=(event:React.PointerEvent<HTMLDivElement>)=>{const drag=axisDragRef.current;if(drag)updateAxis(drag.axis,Math.round((drag.startValue+(event.clientX-drag.startX)*.65)*10)/10);};
   const endAxisDrag=()=>{axisDragRef.current=null;};
 
-  function applyParams(params:ShapeParams,suppress=true){params=migrateAppearance(params);if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setRevolveAngle(params.revolveAngle??360);setRevolveEdge(params.revolveEdge??"Outer");setInflateAmount(params.inflateAmount??55);setInflateDirection(params.inflateDirection??"Outward");setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setFontWeight(params.fontWeight??400);setLetterSpacing(params.letterSpacing??0);setLineSpacing(params.lineSpacing??118);setMaterial(params.material);setFurLength(params.furLength??35);setFurDensity(params.furDensity??120);setColor(params.color);setColorMode(params.colorMode??"Solid");setGradientColor(params.gradientColor??"#6C5CE7");setGradientAngle(params.gradientAngle??0);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setNormalStrength(params.normalStrength??135);setNormalMapEnabled(params.normalMapEnabled??true);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??128);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");setEffect(params.effect??"None");setEffectIntensity(params.effectIntensity??70);setEffectBlur(params.effectBlur??4);setEffectBackground(params.effectBackground??false);setDuotoneDarkColor(params.duotoneDarkColor??"#090C13");setDuotoneColor(params.duotoneColor??"#FF7A45");}
+  function applyParams(params:ShapeParams,suppress=true){params=migrateAppearance(params);if(suppress)suppressHistoryRef.current=true;setGeometryMode(params.geometryMode??"Extrude");setThickness(params.thickness);setSegments(params.segments);setSurfaceDetail(params.surfaceDetail??3);setEdge(params.edge);setMass(params.mass);setRevolveAngle(params.revolveAngle??360);setRevolveEdge(params.revolveEdge??"Outer");setInflateAmount(params.inflateAmount??55);setInflateDirection(params.inflateDirection??"Outward");setBend(params.bend);setBulge(params.bulge);setTaper(params.taper);setTwist(params.twist);setFontWeight(params.fontWeight??400);setLetterSpacing(params.letterSpacing??0);setLineSpacing(params.lineSpacing??118);setMaterial(params.material);setFurLength(params.furLength??35);setFurDensity(params.furDensity??120);setColor(params.color);setColorMode(params.colorMode??"Solid");setImageFill(params.imageFill??"");setGradientColor(params.gradientColor??"#6C5CE7");setGradientAngle(params.gradientAngle??0);setHexDraft(params.color);setColorOpacity(params.colorOpacity);setRoughness(params.roughness);setTextureRepeat(params.textureRepeat);setTextureRotation(params.textureRotation);setTextureTint(params.textureTint);setNormalStrength(params.normalStrength??135);setNormalMapEnabled(params.normalMapEnabled??true);setGlassIor(params.glassIor);setGlassTransparency(params.glassTransparency);setAsciiCharacters(params.asciiCharacters??128);setAsciiCharacterSet(params.asciiCharacterSet??"Letters + Numbers");setAsciiCustomSet(params.asciiCustomSet??" .:-=+*#%@");setEffect(params.effect??"None");setEffectIntensity(params.effectIntensity??70);setEffectBlur(params.effectBlur??4);setEffectBackground(params.effectBackground??false);setDuotoneDarkColor(params.duotoneDarkColor??"#090C13");setDuotoneColor(params.duotoneColor??"#FF7A45");}
   function resetHistory(params:ShapeParams){historyRef.current=[{...params}];historyIndexRef.current=0;setHistoryTick(tick=>tick+1);}
   const selectShape=(id:string)=>{const target=shapeItems.find(item=>item.id===id);if(!target||id===activeShapeId)return;const params=target.params??{...defaultShapeParams};setActiveShapeId(id);setSourceMode(target.kind??"image");if(target.kind==="text"){setTextDraft(target.text??"");setFontDraft(target.fontUrl??googleFonts[0].url);}applyParams(params);resetHistory(params);};
   const deleteShape=(id:string)=>{
@@ -607,7 +630,7 @@ function Home() {
   const resetGeometry = () => { setGeometryMode("Extrude");setThickness(42); setSegments(18); setSurfaceDetail(3); setEdge(24); setMass(0);setRevolveAngle(360);setRevolveEdge("Outer");setInflateAmount(55);setInflateDirection("Outward"); };
   const resetDeform = () => { setBend(0); setBulge(0); setTaper(0); setTwist(0); };
   const resetMaterial = () => { setMaterial("Gloss");setFurLength(35);setFurDensity(120); setTextureRepeat(2); setTextureRotation(0); setTextureTint(0); setNormalStrength(135); setNormalMapEnabled(true); setGlassIor(1.5); setGlassTransparency(100); };
-  const resetAppearance = () => { setColorMode("Solid");setGradientColor("#6C5CE7");setGradientAngle(0); setColor("#E0E0E0"); setHexDraft("#E0E0E0"); setColorOpacity(100); setRoughness(18); };
+  const resetAppearance = () => { setImageFill("");setColorMode("Solid");setGradientColor("#6C5CE7");setGradientAngle(0); setColor("#E0E0E0"); setHexDraft("#E0E0E0"); setColorOpacity(100); setRoughness(18); };
   const resetTypography=()=>{setFontWeight(400);setLetterSpacing(0);setLineSpacing(118);};
   const resetEffects = () => { setEffect("None");setAsciiCharacters(128);setAsciiCharacterSet("Letters + Numbers");setAsciiCustomSet(" .:-=+*#%@");setEffectIntensity(70);setEffectBlur(4);setEffectBackground(false);setDuotoneDarkColor("#090C13");setDuotoneColor("#FF7A45"); };
   const resetLighting = () => { setLight(72); setLightX(-3); setLightY(5); setLightZ(5); setAmbientLight(55); setShadowSoftness(72); setShadowOpacity(18); setShadows(true); };
@@ -656,7 +679,7 @@ function Home() {
         }
         return captionInk(samples,alpha);
       };
-      try{setCaptionColors({links:colorFor(".project-links"),hint:colorFor(".drag-hint"),logo:colorFor(".studio-brand",1)});}catch{setCaptionColors({links:"white",hint:"white",logo:"white"});}
+      try{setCaptionColors({links:colorFor(".triangle-count"),hint:colorFor(".drag-hint"),logo:colorFor(".studio-brand",1)});}catch{setCaptionColors({links:"white",hint:"white",logo:"white"});}
     };
     if(background.startsWith("blob:")||background.startsWith("data:image/")){
       const image=new Image();image.onload=()=>{if(cancelled)return;ctx.fillStyle="#080808";ctx.fillRect(0,0,256,256);ctx.drawImage(image,0,0,256,256);update();};image.onerror=()=>{ctx.fillStyle="#080808";ctx.fillRect(0,0,256,256);update();};image.src=background;
@@ -686,6 +709,8 @@ function Home() {
   return (
     <main data-background={background} style={{"--caption-opacity":captionOpacity} as React.CSSProperties} data-mobile-panel={mobilePanel} className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
       <a data-ink={captionColors.logo} className="studio-brand brand" href={import.meta.env.BASE_URL}><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
+      <div className="mobile-quick-actions"><button aria-label={language==="ru"?"Гравитация":"Gravity"} title={language==="ru"?"Гравитация":"Gravity"} aria-pressed={gravity} onClick={()=>setGravity(value=>!value)}><HugeiconsIcon icon={GravityIcon} size={18} aria-hidden="true"/></button><button aria-label={language==="ru"?"Настройки":"Settings"} title={language==="ru"?"Настройки":"Settings"} aria-expanded={infoOpen} onClick={()=>setInfoOpen(value=>!value)}><HugeiconsIcon icon={Settings01Icon} size={18} aria-hidden="true"/></button></div>
+      {infoOpen&&<div className="modal-backdrop" onMouseDown={()=>setInfoOpen(false)}><div className="modal info-modal" role="dialog" aria-modal="true" aria-label="Playtools" onMouseDown={event=>event.stopPropagation()}><button className="modal-close" aria-label={t("Close")} onClick={()=>setInfoOpen(false)}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button><img className="info-logo" src={publicAsset("playtools-logo.svg")} alt="Playtools"/><small className="app-version">1.2.4</small><div className="info-settings"><div className="language-toggle" role="group" aria-label="Language"><button className={language==="en"?"active":""} onClick={()=>setLanguage("en")}>EN</button><button className={language==="ru"?"active":""} onClick={()=>setLanguage("ru")}>RU</button></div><div className="fps-setting"><span>{language==="ru"?"Лимит FPS":"FPS Limit"}</span><div role="group" aria-label={language==="ru"?"Лимит FPS":"FPS limit"}>{([30,60,0] as const).map(value=><button key={value} aria-pressed={fpsLimit===value} title={value===0?(language==="ru"?"Без ограничения":"Unlimited"):`${value} FPS`} onClick={()=>setFpsLimit(value)}>{value===0?"Max":value}</button>)}</div></div></div><a href="https://pay.cloudtips.ru/p/55cf592d" target="_blank" rel="noreferrer"><HugeiconsIcon icon={HeartIcon} size={16} aria-hidden="true"/>{t("Support the project")}</a><a href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/>{t("Alexey Razuvaev")}</a></div></div>}
       <section className="workspace">
         <aside className="panel import-panel">
           <div className="panel-heading"><h2>{t("Source")}</h2></div>
@@ -699,19 +724,16 @@ function Home() {
           <div className="tip"><HugeiconsIcon icon={InformationCircleIcon} size={14} aria-hidden="true"/><p>{t(sourceMode==="text"?"Text becomes real editable 3D outlines, including counters inside letters.":"Transparent shapes with clean edges give the best extrusion.")}</p></div>
 
         </aside>
-          <div className="project-links" data-ink={captionColors.links}>
-            <a className="support-project" href="https://pay.cloudtips.ru/p/55cf592d" target="_blank" rel="noreferrer"><HugeiconsIcon icon={HeartIcon} size={14} aria-hidden="true"/><strong>{t("Support the project")}</strong></a>
-            <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
-          </div>
+
 
         <section className="stage" aria-label="3D preview">
           <div className="stage-top">
 
-            <div className="stage-tools"><div className="language-toggle" aria-label="Language"><button className={language==="en"?"active":""} onClick={()=>setLanguage("en")}>EN</button><button className={language==="ru"?"active":""} onClick={()=>setLanguage("ru")}>RU</button></div><div className="stage-actions"><button title={t("Undo")} aria-label={t("Undo")} onClick={undo} disabled={historyIndexRef.current<=0}><HugeiconsIcon icon={UndoIcon} size={18} aria-hidden="true"/></button><button title={t("Redo")} aria-label={t("Redo")} onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}><HugeiconsIcon icon={RedoIcon} size={18} aria-hidden="true"/></button><button onClick={()=>stageRef.current?.center()} title={t("Center object")} aria-label={t("Center object")}><HugeiconsIcon icon={Target01Icon} size={18} aria-hidden="true"/></button><button onClick={resetView} title={t("Reset view")} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={18} aria-hidden="true"/></button><button title={t("Hide UI")} aria-label={t("Hide UI")} onClick={()=>setInterfaceHidden(true)}><HugeiconsIcon icon={ViewOffIcon} size={18} aria-hidden="true"/></button></div></div>
+            <div className="stage-tools"><div className="stage-actions"><button title={t("Undo")} aria-label={t("Undo")} onClick={undo} disabled={historyIndexRef.current<=0}><HugeiconsIcon icon={UndoIcon} size={18} aria-hidden="true"/></button><button title={t("Redo")} aria-label={t("Redo")} onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}><HugeiconsIcon icon={RedoIcon} size={18} aria-hidden="true"/></button><button onClick={()=>stageRef.current?.center()} title={t("Center object")} aria-label={t("Center object")}><HugeiconsIcon icon={Target01Icon} size={18} aria-hidden="true"/></button><button onClick={resetView} title={t("Reset view")} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={18} aria-hidden="true"/></button><button title={t("Hide UI")} aria-label={t("Hide UI")} onClick={()=>setInterfaceHidden(true)}><HugeiconsIcon icon={ViewOffIcon} size={18} aria-hidden="true"/></button></div></div>
           </div>
           <div className="scene">
             <div className="ambient" style={{ opacity: light / 100 }} />
-            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} furLength={furLength} furDensity={furDensity} customMaterialUrl={customMaterialUrl} color={color} colorMode={colorMode} gradientColor={gradientColor} gradientAngle={gradientAngle} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} revolveAngle={revolveAngle} revolveEdge={revolveEdge} inflateAmount={inflateAmount} inflateDirection={inflateDirection} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalMapEnabled?normalStrength:0} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={effect} effectIntensity={effectIntensity} effectBlur={effectBlur} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} backgroundFill={background==="Fill"?backgroundFill:undefined} gravity={gravity} demoSpin={Boolean(activeShape?.demo&&activeShape.kind!=="object")} onCameraChange={setCameraView} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
+            <ThreeStage ref={stageRef} source={source} fileName={fileName} text={activeShape?.kind==="text"?activeShape.text:undefined} fontUrl={activeShape?.kind==="text"?activeShape.fontUrl:undefined} fontWeight={fontWeight} letterSpacing={letterSpacing} lineSpacing={lineSpacing} geometryMode={geometryMode} thickness={thickness} material={material} furLength={furLength} furDensity={furDensity} customMaterialUrl={customMaterialUrl} color={color} imageFill={imageFill} colorMode={colorMode} gradientColor={gradientColor} gradientAngle={gradientAngle} colorOpacity={colorOpacity} glassIor={glassIor} glassTransparency={glassTransparency} roughness={roughness} light={light} lightX={lightX} lightY={lightY} lightZ={lightZ} ambientLight={ambientLight} shadowSoftness={shadowSoftness} shadowOpacity={shadowOpacity} shadows={shadows} segments={segments} surfaceDetail={surfaceDetail} edge={edge} mass={mass} revolveAngle={revolveAngle} revolveEdge={revolveEdge} inflateAmount={inflateAmount} inflateDirection={inflateDirection} bend={bend} bulge={bulge} taper={taper} twist={twist} textureRepeat={textureRepeat} textureRotation={textureRotation} textureTint={textureTint} normalStrength={normalMapEnabled?normalStrength:0} asciiCharacters={asciiCharacters} asciiGlyphs={asciiGlyphs} effect={effect} effectIntensity={effectIntensity} effectBlur={effectBlur} effectBackground={effectBackground} duotoneDarkColor={duotoneDarkColor} duotoneColor={duotoneColor} background={background} backgroundFill={background==="Fill"?backgroundFill:undefined} fpsLimit={fpsLimit} gravity={gravity} demoSpin={Boolean(activeShape?.demo&&activeShape.kind!=="object")} onCameraChange={setCameraView} onRotationChange={setRotation} onReady={setTriangles} onLoading={setIsRendering} onError={flash} />
             {isRendering&&<div className="model-loader" role="status"><span/><b>{t("Building geometry")}</b><small>{t("Interface stays responsive")}</small></div>}
           </div>
           <div className="axis-row">
@@ -811,11 +833,14 @@ function Home() {
           <details className="property-section appearance-section" open>
             <summary><HugeiconsIcon className="section-expand" icon={AddIcon} size={12} aria-hidden="true"/><HugeiconsIcon className="section-collapse" icon={Remove01Icon} size={12} aria-hidden="true"/><span>{t("Appearance")}</span><button onClick={(e)=>{e.preventDefault();resetAppearance();}} aria-label="Reset appearance"><HugeiconsIcon icon={RefreshIcon} size={14} aria-hidden="true"/></button></summary>
             <div className="section-body">
-              <div className="fill-modes" role="group" aria-label="Fill type">{(["Solid","Linear","Radial","Angular"] as ColorMode[]).map(mode=><button key={mode} className={colorMode===mode?"active":""} onClick={()=>setColorMode(mode)}>{t(mode)}</button>)}</div>
-              {colorMode!=="Solid"&&<div className="gradient-preview" aria-hidden="true" style={{background:colorMode==="Linear"?`linear-gradient(${90-gradientAngle}deg,${color},${gradientColor})`:colorMode==="Radial"?`radial-gradient(ellipse closest-side,${color},${gradientColor})`:`conic-gradient(from ${gradientAngle}deg,${color},${gradientColor})`}}/>}
-              <div className="control-row"><span>{t("Color")}</span><input className="color-hex-input" aria-label="HEX color" value={hexDraft} maxLength={7} spellCheck={false} onChange={(e)=>setHexDraft(e.target.value.toUpperCase())} onBlur={commitHex} onKeyDown={(e)=>{if(e.key==="Enter"){commitHex();e.currentTarget.blur();}}}/></div>
+              <div className="fill-modes" role="group" aria-label="Fill type">{(["Solid","Gradient","Image"] as const).map(mode=><button key={mode} className={(mode==="Gradient"?colorMode!=="Solid"&&colorMode!=="Image":colorMode===mode)?"active":""} onClick={()=>{setColorMode(mode==="Gradient"?lastGradientMode.current:mode);if(mode==="Image"&&!imageFill)setImageFill(publicAsset("textures/leopard.svg"));}}>{t(mode)}</button>)}</div>
+              {colorMode!=="Solid"&&colorMode!=="Image"&&<div className="gradient-types" role="group" aria-label={language==="ru"?"Вид градиента":"Gradient type"}>{(["Linear","Radial","Angular"] as const).map(mode=><button key={mode} className={colorMode===mode?"active":""} aria-label={t(mode)} title={t(mode)} aria-pressed={colorMode===mode} onClick={()=>setColorMode(mode)}><span className={`gradient-kind-icon ${mode.toLowerCase()}`} aria-hidden="true"/><span>{t(mode)}</span></button>)}</div>}
+              {colorMode!=="Solid"&&colorMode!=="Image"&&<div className="gradient-preview" aria-hidden="true" style={{background:colorMode==="Linear"?`linear-gradient(${90-gradientAngle}deg,${color},${gradientColor})`:colorMode==="Radial"?`radial-gradient(ellipse closest-side,${color},${gradientColor})`:`conic-gradient(from ${gradientAngle}deg,${color},${gradientColor})`}}/>}
+              {colorMode!=="Image"&&<><div className="control-row"><span>{t("Color")}</span><input className="color-hex-input" aria-label="HEX color" value={hexDraft} maxLength={7} spellCheck={false} onChange={(e)=>setHexDraft(e.target.value.toUpperCase())} onBlur={commitHex} onKeyDown={(e)=>{if(e.key==="Enter"){commitHex();e.currentTarget.blur();}}}/></div>
               <div className="color-row">{paletteColors.map((item) => <ColorSwatch key={item} color={item} selected={color===item} onChoose={()=>chooseColor(item)} onRemove={()=>setPaletteColors(items=>items.filter(entry=>entry!==item))}/>)}<label className="custom-color"><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/><ColorSpectrum label="Custom color" color={color} onInput={next=>chooseColor(next,false)} onCommit={rememberColor}/></label></div>
               {colorMode!=="Solid"&&<div className="gradient-controls"><TonePalette plain label="Second color" color={gradientColor} colors={paletteColors} onChange={setGradientColor} onCommit={rememberColor} t={t}/>{colorMode!=="Radial"&&<RangeControl label={t("Gradient angle")} value={gradientAngle} min={0} max={360} suffix="°" onChange={setGradientAngle}/>}</div>}
+              </>}
+              {colorMode==="Image"&&<div className="image-fill-controls" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();void importImageFill(event.dataTransfer.files[0]);}}><div className="image-fill-gallery">{[{id:"leopard",name:language==="ru"?"Леопард":"Leopard",source:publicAsset("textures/leopard.svg")},...imageFills,...(imageFill&&!imageFills.some(item=>item.source===imageFill)&&imageFill!==publicAsset("textures/leopard.svg")?[{id:"current",name:language==="ru"?"Текущее изображение":"Current image",source:imageFill}]:[])].map(item=><button key={item.id} className={imageFill===item.source?"active":""} aria-label={item.name} aria-pressed={imageFill===item.source} title={item.name} onClick={()=>setImageFill(item.source)}><img src={item.source} alt="" loading="lazy" decoding="async"/></button>)}</div><button className="image-fill-upload" aria-label={language==="ru"?"Загрузить изображение":"Upload image"} onClick={()=>imageFillRef.current?.click()}><HugeiconsIcon icon={AddIcon} size={16} aria-hidden="true"/>{t("Upload")}</button><input ref={imageFillRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{void importImageFill(event.target.files?.[0]);event.currentTarget.value="";}}/><RangeControl label={t("Repeat")} value={textureRepeat} min={.5} max={8} step={.1} suffix="×" onChange={setTextureRepeat}/></div>}
               <div className="mini-controls">
                 <RangeControl label={t("Roughness")} value={roughness} min={0} max={100} suffix="%" onChange={setRoughness}/>
                 <RangeControl label={t("Color opacity")} value={colorOpacity} min={0} max={100} suffix="%" onChange={setColorOpacity}/>
@@ -864,6 +889,7 @@ function Home() {
         </div>
       </footer>
 
+      <button className="desktop-info" aria-label={language==="ru"?"Настройки":"Settings"} onClick={()=>setInfoOpen(true)}><HugeiconsIcon icon={Settings01Icon} size={16} aria-hidden="true"/></button>
       <small className="triangle-count" data-ink={captionColors.links}>{triangles.toLocaleString(language==="ru"?"ru-RU":"en-US")} {language==="ru"?"треугольников":"triangles"}</small>
       <nav className="mobile-nav" aria-label={language==="ru"?"Панели редактора":"Editor panels"}>{([['preview',language==='ru'?'Сцена':'Scene'],['source',t('Source')],['properties',t('Properties')],['camera',language==='ru'?'Камера':'Camera']] as const).map(([id,label])=><button key={id} aria-pressed={mobilePanel===id} onClick={()=>setMobilePanel(id)}>{label}</button>)}</nav>
 

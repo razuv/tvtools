@@ -1,6 +1,8 @@
 "use client";
 
-import { renderQuality } from "./renderQuality";
+import { waitForImageFill } from "./imageFill";
+import { TouchGesture } from "./touchGesture";
+import { renderQuality,frameInterval,type FrameLimit } from "./renderQuality";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
@@ -34,6 +36,7 @@ export type StageHandle = {
 };
 
 type StageProps = GradientSettings & {
+  fpsLimit?:FrameLimit;
   gravity?:boolean;
   interactive?:boolean;
   furLength?:number;
@@ -705,39 +708,37 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
     rotate(axis, amount = 15) { physicsRef.current=null;const runtime = runtimeRef.current; if (runtime) {runtime.autoRotate=false;runtime.model.rotation[axis] += THREE.MathUtils.degToRad(amount);latestPropsRef.current.onRotationChange?.({x:THREE.MathUtils.radToDeg(runtime.model.rotation.x),y:THREE.MathUtils.radToDeg(runtime.model.rotation.y),z:THREE.MathUtils.radToDeg(runtime.model.rotation.z)});}},
     setRotation(axis,degrees){physicsRef.current=null;const runtime=runtimeRef.current;if(runtime){runtime.autoRotate=false;runtime.model.rotation[axis]=THREE.MathUtils.degToRad(degrees);latestPropsRef.current.onRotationChange?.({x:THREE.MathUtils.radToDeg(runtime.model.rotation.x),y:THREE.MathUtils.radToDeg(runtime.model.rotation.y),z:THREE.MathUtils.radToDeg(runtime.model.rotation.z)});}},
-    exportPng(name, withBackground = false) {
-      const runtime = runtimeRef.current; if (!runtime) return;
-      const host = runtime.renderer.domElement.parentElement!;
-      const { width, height } = host.getBoundingClientRect();
-      const oldBackground=runtime.scene.background;
+    async exportPng(name, withBackground = false) {
+      const runtime=runtimeRef.current;if(!runtime||runtime.exporting)return;
+      const host=runtime.renderer.domElement.parentElement!;
+      const {width,height}=host.getBoundingClientRect(),oldBackground=runtime.scene.background,current=latestPropsRef.current;
       runtime.exporting=true;
-      setFurQuality(runtime,latestPropsRef.current,24);
-      runtime.renderer.setSize(1400, 1400, false);
-      runtime.camera.aspect = 1;
-      runtime.camera.updateProjectionMatrix();
-      const ascii=latestPropsRef.current.effect==="ASCII";
-      const output=ascii?document.createElement("canvas"):runtime.renderer.domElement;
-      if(ascii){const current=latestPropsRef.current;renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",current.asciiGlyphs,output,current.asciiCharacters);}
-      else{
-        const current=latestPropsRef.current;
-        runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;
-        runtime.composer.setSize(1400,1400);
-        const exportDrawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());
-        runtime.backgroundTarget.setSize(exportDrawing.x,exportDrawing.y);
-        if(current.effect==="None")runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current,withBackground);
+      try{
+        setFurQuality(runtime,current,24);
+        if(current.colorMode==="Image")await waitForImageFill(current.imageFill??"");
+        if(runtimeRef.current!==runtime)return;
+        runtime.renderer.setSize(1400,1400,false);runtime.camera.aspect=1;runtime.camera.updateProjectionMatrix();
+        const ascii=current.effect==="ASCII",output=ascii?document.createElement("canvas"):runtime.renderer.domElement;
+        if(ascii)renderAscii(runtime,1400,1400,withBackground?"opaque":"transparent",current.asciiGlyphs,output,current.asciiCharacters);
+        else{
+          runtime.scene.background=withBackground?(oldBackground??new THREE.Color("#080808")):null;
+          runtime.composer.setSize(1400,1400);
+          const drawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());runtime.backgroundTarget.setSize(drawing.x,drawing.y);
+          if(current.effect==="None")runtime.renderer.render(runtime.scene,runtime.camera);else renderWithEffects(runtime,current,withBackground);
+        }
+        const blob=await new Promise<Blob|null>(resolve=>output.toBlob(resolve,"image/png"));
+        if(!blob)throw Error("Could not create PNG");
+        downloadBlob(blob,`${name}.png`);
+      }catch{latestPropsRef.current.onError?.("Could not export PNG");}
+      finally{
+        if(runtimeRef.current===runtime){
+          runtime.renderer.setSize(width,height,false);runtime.composer.setSize(width,height);
+          const drawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());runtime.backgroundTarget.setSize(drawing.x,drawing.y);
+          runtime.camera.aspect=width/Math.max(1,height);runtime.camera.updateProjectionMatrix();runtime.scene.background=oldBackground;
+          setFurQuality(runtime,latestPropsRef.current,runtime.quality.furLayers);runtime.dirty=true;
+        }
+        runtime.exporting=false;
       }
-      output.toBlob((blob) => {
-        if (blob) downloadBlob(blob, `${name}.png`);
-        runtime.renderer.setSize(width, height, false);
-        runtime.composer.setSize(width,height);
-        const restoredDrawing=runtime.renderer.getDrawingBufferSize(new THREE.Vector2());
-        runtime.backgroundTarget.setSize(restoredDrawing.x,restoredDrawing.y);
-        runtime.camera.aspect = width / Math.max(1, height);
-        runtime.camera.updateProjectionMatrix();
-        runtime.scene.background=oldBackground;
-        setFurQuality(runtime,latestPropsRef.current,runtime.quality.furLayers);
-        runtime.dirty=true;runtime.exporting=false;
-      }, "image/png");
     },
     exportObj(name) {
       const runtime = runtimeRef.current; if (!runtime) return;
@@ -786,6 +787,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const asciiSample=document.createElement("canvas");
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .1; controls.maxDistance = 120; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
+    controls.touches.ONE=THREE.TOUCH.ROTATE;controls.touches.TWO=THREE.TOUCH.DOLLY_PAN;
     controls.addEventListener("change",()=>{if(runtimeRef.current)runtimeRef.current.dirty=true;latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target));});
     const model = new THREE.Group(); model.rotation.set(0,0,0); scene.add(model);
     const ambient=new THREE.HemisphereLight(0xffffff,0x202020,1.8);scene.add(ambient);
@@ -806,14 +808,16 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
     runtimeRef.current = { exporting:false,dirty:true,quality,scene, camera, renderer, composer, effectPass, compositePass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0,grabbed=false;
+    const touchGesture=new TouchGesture();
     const grabLocal=new THREE.Vector3(),grabScreen=new THREE.Vector3();
     const tether=tetherRef.current!,tetherLine=tether.querySelector("line")!,tetherCircle=tether.querySelector("circle")!;
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),dragPlane=new THREE.Plane(),hitPoint=new THREE.Vector3();
     const pointRay=(event:PointerEvent)=>{const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);};
-    const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
+    const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<(runtime.quality.furLayers<=8?120:40))return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{
       if(event.button!==0||latestPropsRef.current.interactive===false)return;
       runtimeRef.current!.autoRotate=false;
+      if(event.pointerType==="touch"&&!touchGesture.start(event.pointerId)){rotating=false;grabbed=false;physicsRef.current?.release();tether.style.display="none";return;}
       pointRay(event);const hit=raycaster.intersectObject(model,true)[0];
       grabbed=Boolean(hit);if(hit){grabLocal.copy(hit.point);model.worldToLocal(grabLocal);}
       if(latestPropsRef.current.gravity){
@@ -824,6 +828,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       lastPointerX=event.clientX;lastPointerY=event.clientY;renderer.domElement.setPointerCapture(event.pointerId);
     };
     const pointerMove=(event:PointerEvent)=>{
+      if(event.pointerType==="touch"&&!touchGesture.canDrag(event.pointerId))return;
       if(latestPropsRef.current.gravity){
         if(!physicsRef.current?.dragging)return;pointRay(event);
         if(raycaster.ray.intersectPlane(dragPlane,hitPoint))physicsRef.current.dragTo(hitPoint);
@@ -831,7 +836,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       }
       if(!rotating)return;pointRay(event);const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;lastPointerX=event.clientX;lastPointerY=event.clientY;model.rotation.y+=dx*.008;model.rotation.x+=dy*.008;emitRotation();
     };
-    const pointerUp=(event:PointerEvent)=>{if(event.button===0||event.type==="pointercancel"||event.type==="lostpointercapture"){rotating=false;grabbed=false;tether.style.display="none";physicsRef.current?.release();}};
+    const pointerUp=(event:PointerEvent)=>{if(event.pointerType==="touch")touchGesture.end(event.pointerId);if(event.button===0||event.type==="pointercancel"||event.type==="lostpointercapture"){rotating=false;grabbed=false;tether.style.display="none";physicsRef.current?.release();}};
     const stopAuto=()=>{if(runtimeRef.current)runtimeRef.current.autoRotate=false;};
     renderer.domElement.addEventListener("pointerdown",pointerDown);
     renderer.domElement.addEventListener("pointermove",pointerMove);
@@ -855,9 +860,10 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       if(!runtime)return;
       if(runtime.exporting){frame=requestAnimationFrame(loop);return;}
       if(document.hidden){lastPhysicsTime=time;frame=requestAnimationFrame(loop);return;}
-      if(time-lastRenderTime<quality.frameInterval-1){frame=requestAnimationFrame(loop);return;}
+      const targetInterval=frameInterval(latestPropsRef.current.fpsLimit??60);
+      if(time-lastRenderTime<targetInterval-1){frame=requestAnimationFrame(loop);return;}
       const interval=time-lastRenderTime;lastRenderTime=time;
-      slowFrames=interval>50?slowFrames+1:Math.max(0,slowFrames-1);
+      slowFrames=interval>Math.max(1000/60,targetInterval)*1.8?slowFrames+1:Math.max(0,slowFrames-1);
       if(slowFrames>=30&&renderer.getPixelRatio()>.75){renderer.setPixelRatio(Math.max(.75,renderer.getPixelRatio()*.8));composer.setPixelRatio(renderer.getPixelRatio());resize();runtime.dirty=true;slowFrames=0;}
       controls.update();
       const dt=(time-lastPhysicsTime)/1000;lastPhysicsTime=time;
@@ -955,7 +961,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
     runtime.model.children.forEach((child) => { if (child instanceof THREE.Mesh) { removeFurShells(child);const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props);if(props.material==="Fur")addFurShells(child,props.color,props.colorOpacity/100,props.furLength??35,props.furDensity??120,props,runtime.quality.furLayers); old.dispose(); } });
-  }, [props.furLength,props.furDensity,props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
+  }, [props.imageFill,props.furLength,props.furDensity,props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);
 

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import {furGeometry} from "./furGeometry.ts";
 import { applyColorGradient, type GradientSettings } from "./gradientMaterial.ts";
 
 export function removeFurShells(mesh:THREE.Mesh) {
@@ -10,9 +11,9 @@ export function removeFurShells(mesh:THREE.Mesh) {
 export function addFurShells(mesh:THREE.Mesh,color:string,opacity:number,length:number,density:number,appearance:GradientSettings,layers=24) {
   removeFurShells(mesh);
   if(length<=0)return;
-  const geometry=mesh.geometry.clone();
+  const geometry=furGeometry(mesh.geometry,layers);
   geometry.setAttribute("furLayer",new THREE.InstancedBufferAttribute(Float32Array.from({length:layers},(_,i)=>(i+1)/layers),1));
-  const material=new THREE.MeshStandardMaterial({color,roughness:.95,metalness:0,side:THREE.DoubleSide,opacity:THREE.MathUtils.clamp(opacity,0,1),transparent:opacity<1});
+  const material=new THREE.MeshStandardMaterial({color,roughness:.95,metalness:0,side:THREE.FrontSide,opacity:THREE.MathUtils.clamp(opacity,0,1),transparent:opacity<1});
   applyColorGradient(material,geometry.boundingBox!,color,appearance);
   const compile=material.onBeforeCompile,cacheKey=material.customProgramCacheKey();
   material.customProgramCacheKey=()=>`${cacheKey}|fur-shells`;
