@@ -367,7 +367,7 @@ function edgeLoops(data: Uint8ClampedArray, width: number, height: number) {
       edge.used=true;points.push(edge.to);
       if(edge.to[0]===first.from[0]&&edge.to[1]===first.from[1])break;
       const candidates:Edge[]=(outgoing.get(key(edge.to[0],edge.to[1]))??[]).filter(candidate=>!candidate.used);
-      if(!candidates.length){edge=undefined;break;}
+      if(!candidates.length)break;
       const dx:number=edge.to[0]-edge.from[0],dy:number=edge.to[1]-edge.from[1];
       // At a diagonal pixel contact two contours share one vertex. Following
       // the strongest clockwise turn keeps each filled region on the left and

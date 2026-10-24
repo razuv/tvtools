@@ -412,7 +412,7 @@ function Home() {
   useEffect(()=>setSelectedPreset(""),[activeShapeId]);
   const paramsSignature=JSON.stringify(currentParams);
 
-  useEffect(()=>{const media=matchMedia("(max-width:700px), (pointer:coarse)");const update=()=>{let saved=null;try{saved=localStorage.getItem("playtools-language");}catch{saved=null;}setLanguage(initialLanguage(media.matches,navigator.languages,saved));};media.addEventListener("change",update);window.addEventListener("languagechange",update);return()=>{media.removeEventListener("change",update);window.removeEventListener("languagechange",update);};},[]);
+  useEffect(()=>{const media=matchMedia("(max-width:700px), (pointer:coarse)");const update=()=>{let saved:string|null;try{saved=localStorage.getItem("playtools-language");}catch{saved=null;}setLanguage(initialLanguage(media.matches,navigator.languages,saved));};media.addEventListener("change",update);window.addEventListener("languagechange",update);return()=>{media.removeEventListener("change",update);window.removeEventListener("languagechange",update);};},[]);
   useEffect(()=>{if(!matchMedia("(max-width:700px), (pointer:coarse)").matches){try{localStorage.setItem("playtools-language",language);}catch{/* Browser storage may be disabled. */}}document.documentElement.lang=language;},[language]);
 
   useEffect(()=>{
