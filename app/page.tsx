@@ -357,6 +357,7 @@ function Home() {
   const [toast, setToast] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [interfaceHidden, setInterfaceHidden] = useState(false);
+  const [mobilePanel,setMobilePanel]=useState("preview");
   const [, setHistoryTick] = useState(0);
   const stageRef = useRef<StageHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -683,14 +684,14 @@ function Home() {
   };
 
   return (
-    <main data-background={background} style={{"--caption-opacity":captionOpacity} as React.CSSProperties} className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
+    <main data-background={background} style={{"--caption-opacity":captionOpacity} as React.CSSProperties} data-mobile-panel={mobilePanel} className={`studio-shell ${interfaceHidden?"interface-hidden":""}`}>
       <a data-ink={captionColors.logo} className="studio-brand brand" href={import.meta.env.BASE_URL}><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
       <section className="workspace">
         <aside className="panel import-panel">
           <div className="panel-heading"><h2>{t("Source")}</h2></div>
           <div className="source-tabs"><button className={sourceMode==="image"?"active":""} title={t("Image")} aria-label={t("Image")} aria-pressed={sourceMode==="image"} onClick={()=>setSourceMode("image")}><HugeiconsIcon icon={Image01Icon} size={18} aria-hidden="true"/></button><button className={sourceMode==="text"?"active":""} title={t("Text")} aria-label={t("Text")} aria-pressed={sourceMode==="text"} onClick={()=>setSourceMode("text")}><HugeiconsIcon icon={TextIcon} size={18} aria-hidden="true"/></button><button className={sourceMode==="object"?"active":""} title={language==="ru"?"Объект":"Object"} aria-label={language==="ru"?"Объект":"Object"} aria-pressed={sourceMode==="object"} onClick={()=>setSourceMode("object")}><HugeiconsIcon icon={CubeIcon} size={18} aria-hidden="true"/></button></div>
           {sourceMode!=="text"?<button className="dropzone" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files[0]); }}>
-            <span className="upload-icon"><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/></span><strong>{sourceMode==="object"?(language==="ru"?"Загрузите модель":"Drop your model"):t("Drop your shape")}</strong><small>{sourceMode==="object"?"OBJ or STL":"SVG or PNG"} · max 12 MB</small>{sourceMode!=="object"&&<small className="figma-hint">{t("Figma: Copy as SVG or PNG, then paste")}</small>}
+            <span className="upload-icon"><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/></span><strong>{sourceMode==="object"?(language==="ru"?"Загрузите модель":"Drop your model"):t("Drop your shape")}</strong><small>{sourceMode==="object"?"OBJ or STL":"SVG or PNG"} · max 12 MB</small>
           </button>:<div className="text-source"><label><textarea aria-label={t("Text")} maxLength={120} rows={2} value={textDraft} style={{fontFamily:activeFont.family}} onChange={event=>setTextDraft(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==="Enter")createTextShape();}}/></label><label><select aria-label={t("Font")} value={fontDraft} onChange={event=>setFontDraft(event.target.value)}><optgroup label={t("Google Fonts")}>{googleFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>{customFonts.length>0&&<optgroup label={t("Custom Fonts")}>{customFonts.map(font=><option key={font.id} value={font.url}>{font.name}</option>)}</optgroup>}</select></label><button className="font-upload" onClick={()=>fontRef.current?.click()}><span><HugeiconsIcon icon={AddIcon} size={14} aria-hidden="true"/> {t("Upload font")}</span></button><button className="create-text" onClick={createTextShape}><HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden="true"/> {t("Create")}</button></div>}
           <input ref={fileRef} className="file-input" type="file" accept={sourceMode==="object"?".obj,.stl":".svg,.png,image/svg+xml,image/png"} onChange={(e) => importFile(e.target.files?.[0])} />
           <input ref={fontRef} className="file-input" type="file" accept=".ttf,.otf,font/ttf,font/otf,application/x-font-ttf,application/x-font-opentype" onChange={event=>{void importFont(event.target.files?.[0]);event.currentTarget.value="";}} />
@@ -705,7 +706,7 @@ function Home() {
 
         <section className="stage" aria-label="3D preview">
           <div className="stage-top">
-            <div><span>WEBGL LIVE</span><b>{triangles.toLocaleString(language==="ru"?"ru-RU":"en-US")} {t("TRIANGLES")}</b></div>
+
             <div className="stage-tools"><div className="language-toggle" aria-label="Language"><button className={language==="en"?"active":""} onClick={()=>setLanguage("en")}>EN</button><button className={language==="ru"?"active":""} onClick={()=>setLanguage("ru")}>RU</button></div><div className="stage-actions"><button title={t("Undo")} aria-label={t("Undo")} onClick={undo} disabled={historyIndexRef.current<=0}><HugeiconsIcon icon={UndoIcon} size={18} aria-hidden="true"/></button><button title={t("Redo")} aria-label={t("Redo")} onClick={redo} disabled={historyIndexRef.current>=historyRef.current.length-1}><HugeiconsIcon icon={RedoIcon} size={18} aria-hidden="true"/></button><button onClick={()=>stageRef.current?.center()} title={t("Center object")} aria-label={t("Center object")}><HugeiconsIcon icon={Target01Icon} size={18} aria-hidden="true"/></button><button onClick={resetView} title={t("Reset view")} aria-label={t("Reset view")}><HugeiconsIcon icon={RefreshIcon} size={18} aria-hidden="true"/></button><button title={t("Hide UI")} aria-label={t("Hide UI")} onClick={()=>setInterfaceHidden(true)}><HugeiconsIcon icon={ViewOffIcon} size={18} aria-hidden="true"/></button></div></div>
           </div>
           <div className="scene">
@@ -863,12 +864,8 @@ function Home() {
         </div>
       </footer>
 
-      <section className="mobile-gate" aria-label="Desktop only">
-        <div className="mobile-logo"><img src={publicAsset("favicon.svg")} alt="Playtools logo"/></div>
-        <h1>Playtools</h1>
-        <p>{t("Playtools are available on desktop only.")}</p>
-        <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
-      </section>
+      <small className="triangle-count" data-ink={captionColors.links}>{triangles.toLocaleString(language==="ru"?"ru-RU":"en-US")} {language==="ru"?"треугольников":"triangles"}</small>
+      <nav className="mobile-nav" aria-label={language==="ru"?"Панели редактора":"Editor panels"}>{([['preview',language==='ru'?'Сцена':'Scene'],['source',t('Source')],['properties',t('Properties')],['camera',language==='ru'?'Камера':'Camera']] as const).map(([id,label])=><button key={id} aria-pressed={mobilePanel===id} onClick={()=>setMobilePanel(id)}>{label}</button>)}</nav>
 
       {interfaceHidden&&<button className="restore-ui" title={t("Show UI")} aria-label={t("Show UI")} onClick={()=>setInterfaceHidden(false)}><HugeiconsIcon icon={ViewIcon} size={18} aria-hidden="true"/></button>}
 

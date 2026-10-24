@@ -7,10 +7,10 @@ export function removeFurShells(mesh:THREE.Mesh) {
   }
 }
 
-export function addFurShells(mesh:THREE.Mesh,color:string,opacity:number,length:number,density:number,appearance:GradientSettings) {
+export function addFurShells(mesh:THREE.Mesh,color:string,opacity:number,length:number,density:number,appearance:GradientSettings,layers=24) {
   removeFurShells(mesh);
   if(length<=0)return;
-  const layers=24,geometry=mesh.geometry.clone();
+  const geometry=mesh.geometry.clone();
   geometry.setAttribute("furLayer",new THREE.InstancedBufferAttribute(Float32Array.from({length:layers},(_,i)=>(i+1)/layers),1));
   const material=new THREE.MeshStandardMaterial({color,roughness:.95,metalness:0,side:THREE.DoubleSide,opacity:THREE.MathUtils.clamp(opacity,0,1),transparent:opacity<1});
   applyColorGradient(material,geometry.boundingBox!,color,appearance);

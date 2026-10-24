@@ -1,5 +1,7 @@
 "use client";
 
+import { renderQuality } from "./renderQuality";
+
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { addEffectPipeline } from "./backgroundComposite";
@@ -96,6 +98,8 @@ type StageProps = GradientSettings & {
 
 type Runtime = {
   exporting:boolean;
+  dirty:boolean;
+  quality:ReturnType<typeof renderQuality>;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
@@ -662,9 +666,15 @@ function presetBackground(name: string,fill?:BackgroundFill) {
   const texture=new THREE.CanvasTexture(canvas); texture.colorSpace=THREE.SRGBColorSpace; return texture;
 }
 
+function setFurQuality(runtime:Runtime,current:StageProps,layers:number){
+  if(current.material!=="Fur")return;
+  runtime.model.children.forEach(child=>{if(child instanceof THREE.Mesh)addFurShells(child,current.color,current.colorOpacity/100,current.furLength??35,current.furDensity??120,current,layers);});
+}
+
 function installGeometry(runtime:Runtime,geometry:THREE.BufferGeometry,current:StageProps) {
+      runtime.dirty=true;
       runtime.model.traverse(child=>{if(child instanceof THREE.Mesh){child.geometry.dispose();(child.material as THREE.Material).dispose();if(child instanceof THREE.InstancedMesh)child.dispose();}});runtime.model.clear();
-      const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);if(current.material==="Fur")addFurShells(mesh,current.color,current.colorOpacity/100,current.furLength??35,current.furDensity??120,current);current.onReady?.(Math.round(geometry.getAttribute("position").count/3));
+      const mesh=new THREE.Mesh(geometry,makeMaterial(current.material,current.color,current.roughness,current.textureRepeat,current.textureRotation,current.textureTint,current.normalStrength,current.colorOpacity,current.glassIor,current.glassTransparency,current.customMaterialUrl,geometry.boundingBox!.max.z-geometry.boundingBox!.min.z,current.geometryMode==="Inflate",geometry.boundingBox!,current));mesh.castShadow=current.material!=="Glass";mesh.receiveShadow=false;runtime.model.add(mesh);if(current.material==="Fur")addFurShells(mesh,current.color,current.colorOpacity/100,current.furLength??35,current.furDensity??120,current,runtime.quality.furLayers);current.onReady?.(Math.round(geometry.getAttribute("position").count/3));
 }
 
 export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStage(props, ref) {
@@ -701,6 +711,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const { width, height } = host.getBoundingClientRect();
       const oldBackground=runtime.scene.background;
       runtime.exporting=true;
+      setFurQuality(runtime,latestPropsRef.current,24);
       runtime.renderer.setSize(1400, 1400, false);
       runtime.camera.aspect = 1;
       runtime.camera.updateProjectionMatrix();
@@ -724,7 +735,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         runtime.camera.aspect = width / Math.max(1, height);
         runtime.camera.updateProjectionMatrix();
         runtime.scene.background=oldBackground;
-        runtime.exporting=false;
+        setFurQuality(runtime,latestPropsRef.current,runtime.quality.furLayers);
+        runtime.dirty=true;runtime.exporting=false;
       }, "image/png");
     },
     exportObj(name) {
@@ -743,7 +755,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
   }));
 
-  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,fontWeight:shapeFontWeight,letterSpacing:shapeLetterSpacing,lineSpacing:shapeLineSpacing,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,revolveAngle:shapeRevolveAngle,revolveEdge:shapeRevolveEdge,inflateAmount:shapeInflateAmount,inflateDirection:shapeInflateDirection,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist,onLoading:onShapeLoading,onError:onShapeError}=props;
+  const {source:shapeSource,fileName:shapeFileName,text:shapeText,fontUrl:shapeFontUrl,fontWeight:shapeFontWeight,letterSpacing:shapeLetterSpacing,lineSpacing:shapeLineSpacing,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,revolveAngle:shapeRevolveAngle,revolveEdge:shapeRevolveEdge,inflateAmount:shapeInflateAmount,inflateDirection:shapeInflateDirection,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist}=props;
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -751,7 +763,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 100);
     camera.position.set(0,0,latestPropsRef.current.demoSpin?6.15:5.4);
     const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const quality=renderQuality({pixelRatio:window.devicePixelRatio,cores:navigator.hardwareConcurrency,memory:(navigator as Navigator & {deviceMemory?:number}).deviceMemory,mobile:matchMedia("(pointer:coarse)").matches});
+    renderer.setPixelRatio(quality.pixelRatio);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
@@ -773,12 +786,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const asciiSample=document.createElement("canvas");
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = .075; controls.enableRotate=false; controls.enablePan = true; controls.screenSpacePanning=true; controls.minDistance = .1; controls.maxDistance = 120; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
-    controls.addEventListener("change",()=>latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target)));
+    controls.addEventListener("change",()=>{if(runtimeRef.current)runtimeRef.current.dirty=true;latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target));});
     const model = new THREE.Group(); model.rotation.set(0,0,0); scene.add(model);
     const ambient=new THREE.HemisphereLight(0xffffff,0x202020,1.8);scene.add(ambient);
     const key = new THREE.DirectionalLight(0xffffff, 4.2); key.position.set(-3, 5, 5);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(quality.shadowSize,quality.shadowSize);
     key.shadow.camera.near = .1; key.shadow.camera.far = 20;
     key.shadow.camera.left = -5; key.shadow.camera.right = 5; key.shadow.camera.top = 5; key.shadow.camera.bottom = -5;
     key.shadow.bias = -.00008; key.shadow.normalBias = .035;
@@ -791,7 +804,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     shadowFloor.receiveShadow = true;
     scene.add(shadowFloor);
     const worker=new Worker(new URL("./geometry.worker.ts",import.meta.url),{type:"module"});
-    runtimeRef.current = { exporting:false,scene, camera, renderer, composer, effectPass, compositePass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
+    runtimeRef.current = { exporting:false,dirty:true,quality,scene, camera, renderer, composer, effectPass, compositePass, backgroundTarget, controls, model, key, fill, ambient, shadowFloor, worker, requestId:0, asciiCanvas, asciiSample, asciiLastFrame:0, autoRotate:Boolean(latestPropsRef.current.demoSpin), lastRotationEmit:0 };
     let rotating=false,lastPointerX=0,lastPointerY=0,grabbed=false;
     const grabLocal=new THREE.Vector3(),grabScreen=new THREE.Vector3();
     const tether=tetherRef.current!,tetherLine=tether.querySelector("line")!,tetherCircle=tether.querySelector("circle")!;
@@ -834,14 +847,19 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(event.data.position,3));geometry.setAttribute("normal",new THREE.BufferAttribute(event.data.normal,3));if(event.data.uv.length)geometry.setAttribute("uv",new THREE.BufferAttribute(event.data.uv,2));geometry.computeBoundingBox();geometry.computeBoundingSphere();
       installGeometry(runtime,geometry,latestPropsRef.current);
     };
-    const resize = () => { const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target)); };
+    const resize = () => { if(runtimeRef.current)runtimeRef.current.dirty=true;const { width, height } = host.getBoundingClientRect(); renderer.setSize(width, height, false);composer.setSize(width,height);const drawing=renderer.getDrawingBufferSize(new THREE.Vector2());backgroundTarget.setSize(drawing.x,drawing.y); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); latestPropsRef.current.onCameraChange?.(getCameraView(camera,controls.target)); };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
-    let frame = 0;const demoStart=performance.now();let lastPhysicsTime=demoStart;
+    let frame = 0;const demoStart=performance.now();let lastPhysicsTime=demoStart,lastRenderTime=0,lastDrawTime=0,slowFrames=0;
     const loop = (time=0) => {
-      controls.update();
       const runtime=runtimeRef.current;
       if(!runtime)return;
       if(runtime.exporting){frame=requestAnimationFrame(loop);return;}
+      if(document.hidden){lastPhysicsTime=time;frame=requestAnimationFrame(loop);return;}
+      if(time-lastRenderTime<quality.frameInterval-1){frame=requestAnimationFrame(loop);return;}
+      const interval=time-lastRenderTime;lastRenderTime=time;
+      slowFrames=interval>50?slowFrames+1:Math.max(0,slowFrames-1);
+      if(slowFrames>=30&&renderer.getPixelRatio()>.75){renderer.setPixelRatio(Math.max(.75,renderer.getPixelRatio()*.8));composer.setPixelRatio(renderer.getPixelRatio());resize();runtime.dirty=true;slowFrames=0;}
+      controls.update();
       const dt=(time-lastPhysicsTime)/1000;lastPhysicsTime=time;
       if(latestPropsRef.current.gravity&&model.children.length){
         runtime.autoRotate=false;
@@ -857,8 +875,12 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
         tetherLine.setAttribute("x1",String(cursorX));tetherLine.setAttribute("y1",String(cursorY));
         tetherLine.setAttribute("x2",String((grabScreen.x+1)*width/2));tetherLine.setAttribute("y2",String((1-grabScreen.y)*height/2));
       }
-      model.traverse(child=>{if(child instanceof THREE.Mesh){const material=child.material as THREE.Material;if(material.userData.patternTime)material.userData.patternTime.value=time/1000;}});
+      let animatedMaterial=false;
+      model.traverse(child=>{if(child instanceof THREE.Mesh){const material=child.material as THREE.Material;if(material.userData.patternTime){material.userData.patternTime.value=time/1000;animatedMaterial=true;}}});
       if(runtime.autoRotate&&latestPropsRef.current.demoSpin){model.rotation.y=Math.sin((time-demoStart)*.00045)*THREE.MathUtils.degToRad(18);emitRotation(time);}
+      const moving=rotating||runtime.autoRotate||animatedMaterial||(latestPropsRef.current.gravity&&physicsRef.current?.body.sleepState!==2);
+      if(!runtime.dirty&&!moving&&time-lastDrawTime<1000){frame=requestAnimationFrame(loop);return;}
+      runtime.dirty=false;lastDrawTime=time;
       if(latestPropsRef.current.effect==="ASCII"){
         renderer.domElement.style.opacity="0";
         asciiCanvas.style.display="block";
@@ -880,6 +902,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     return () => { cancelAnimationFrame(frame);model.children.forEach(child=>{if(child instanceof THREE.Mesh)removeFurShells(child);}); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("lostpointercapture",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
+  useEffect(()=>{if(runtimeRef.current)runtimeRef.current.dirty=true;});
+
   useEffect(()=>{if(runtimeRef.current)runtimeRef.current.controls.enabled=props.interactive!==false;},[props.interactive]);
 
   useEffect(()=>{
@@ -894,29 +918,29 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       const runtime = runtimeRef.current; if (!runtime) return;
       const requestId=++runtime.requestId;
       if(shapeSource&&/\.(obj|stl)$/i.test(shapeFileName)) {
-        onShapeLoading?.(true);
+        latestPropsRef.current.onLoading?.(true);
         try {
           const response=await fetch(shapeSource);
           if(!response.ok)throw new Error("Could not read model");
           const geometry=parseModel(await response.arrayBuffer(),shapeFileName);
           if(cancelled||runtimeRef.current!==runtime||runtime.requestId!==requestId){geometry.dispose();return;}
           runtime.autoRotate=false;installGeometry(runtime,geometry,latestPropsRef.current);
-        }catch(error){if(!cancelled)onShapeError?.(error instanceof Error?error.message:"Could not load model");}
-        finally{if(!cancelled)onShapeLoading?.(false);}
+        }catch(error){if(!cancelled)latestPropsRef.current.onError?.(error instanceof Error?error.message:"Could not load model");}
+        finally{if(!cancelled)latestPropsRef.current.onLoading?.(false);}
         return;
       }
       let shapes: THREE.Shape[];
       try { shapes = shapeText?.trim()&&shapeFontUrl ? await textShapes(shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing) : shapeSource ? (shapeFileName.toLowerCase().endsWith(".svg") ? await svgShapes(shapeSource) : await pngShapes(shapeSource, 48 + shapeSegments * 18)) : [polygonShape(demoPoints)]; }
       catch (error) {
         console.error("Shape generation failed", error);
-        onShapeLoading?.(false);
-        onShapeError?.(error instanceof Error ? error.message : "Could not generate this shape");
+        latestPropsRef.current.onLoading?.(false);
+        latestPropsRef.current.onError?.(error instanceof Error ? error.message : "Could not generate this shape");
         return;
       }
       await new Promise(resolve=>window.setTimeout(resolve,70));
       if (cancelled || !runtimeRef.current) return;
       const deforming=Math.abs(shapeMass)+Math.abs(shapeBend)+Math.abs(shapeBulge)+Math.abs(shapeTaper)+Math.abs(shapeTwist)>0;
-      const heavy=shapeGeometryMode!=="Extrude"||shapeSegments>=64||(deforming&&shapeSurfaceDetail>=3)||shapeMass>=70||shapeEdge>=180;onShapeLoading?.(heavy);
+      const heavy=shapeGeometryMode!=="Extrude"||shapeSegments>=64||(deforming&&shapeSurfaceDetail>=3)||shapeMass>=70||shapeEdge>=180;latestPropsRef.current.onLoading?.(heavy);
       // SVGLoader samples every curve separately, so a nominal value of 256
       // can otherwise create thousands of contour points per ring. Preserve
       // the requested visual detail while bounding the actual ring density.
@@ -926,11 +950,11 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
       runtime.worker.postMessage({id:requestId,shapes:sampled,geometryMode:shapeGeometryMode,thickness:shapeThickness,segments:shapeSegments,surfaceDetail:shapeSurfaceDetail,edge:shapeEdge,mass:shapeMass,revolveAngle:shapeRevolveAngle,revolveEdge:shapeRevolveEdge,inflateAmount:shapeInflateAmount,inflateDirection:shapeInflateDirection,bend:shapeBend,bulge:shapeBulge,taper:shapeTaper,twist:shapeTwist});
     };
     build(); return () => { cancelled = true; };
-  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeRevolveAngle,shapeRevolveEdge,shapeInflateAmount,shapeInflateDirection,shapeBend,shapeBulge,shapeTaper,shapeTwist,onShapeLoading,onShapeError]);
+  }, [shapeSource,shapeFileName,shapeText,shapeFontUrl,shapeFontWeight,shapeLetterSpacing,shapeLineSpacing,shapeGeometryMode,shapeThickness,shapeSegments,shapeSurfaceDetail,shapeEdge,shapeMass,shapeRevolveAngle,shapeRevolveEdge,shapeInflateAmount,shapeInflateDirection,shapeBend,shapeBulge,shapeTaper,shapeTwist]);
 
   useEffect(() => {
     const runtime = runtimeRef.current; if (!runtime) return;
-    runtime.model.children.forEach((child) => { if (child instanceof THREE.Mesh) { removeFurShells(child);const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props);if(props.material==="Fur")addFurShells(child,props.color,props.colorOpacity/100,props.furLength??35,props.furDensity??120,props); old.dispose(); } });
+    runtime.model.children.forEach((child) => { if (child instanceof THREE.Mesh) { removeFurShells(child);const old = child.material as THREE.Material; child.castShadow=props.material!=="Glass"; child.material = makeMaterial(props.material, props.color, props.roughness, props.textureRepeat, props.textureRotation, props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency,props.customMaterialUrl,child.geometry.boundingBox!.max.z-child.geometry.boundingBox!.min.z,props.geometryMode==="Inflate",child.geometry.boundingBox!,props);if(props.material==="Fur")addFurShells(child,props.color,props.colorOpacity/100,props.furLength??35,props.furDensity??120,props,runtime.quality.furLayers); old.dispose(); } });
   }, [props.furLength,props.furDensity,props.colorMode,props.gradientColor,props.gradientAngle,props.geometryMode,props.material,props.customMaterialUrl,props.color,props.roughness,props.textureRepeat,props.textureRotation,props.textureTint,props.normalStrength,props.colorOpacity,props.glassIor,props.glassTransparency]);
 
   useEffect(() => { const runtime = runtimeRef.current; if (runtime) { runtime.key.intensity = props.light / 18; runtime.fill.intensity = props.light / 30; runtime.ambient.intensity=props.ambientLight/45;runtime.key.position.set(props.lightX,props.lightY,props.lightZ);runtime.key.shadow.radius=THREE.MathUtils.mapLinear(props.shadowSoftness,0,100,1,12);(runtime.shadowFloor.material as THREE.ShadowMaterial).opacity=props.shadowOpacity/100;runtime.shadowFloor.visible=props.shadows; runtime.key.castShadow=props.shadows; } }, [props.light,props.lightX,props.lightY,props.lightZ,props.ambientLight,props.shadowSoftness,props.shadowOpacity,props.shadows]);

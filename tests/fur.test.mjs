@@ -25,3 +25,11 @@ test("changing fur disposes old resources and zero length restores a plain surfa
   assert.equal(mesh.children.length,0);assert.equal(disposed,3);
   mesh.geometry.dispose();mesh.material.dispose();
 });
+
+test("lighter fur retains full hair length with fewer layers",()=>{
+  const mesh=fixture(),shells=addFurShells(mesh,"#ffffff",1,35,120,appearance,10);
+  assert.equal(shells.count,10);
+  const layers=shells.geometry.getAttribute("furLayer");
+  assert.ok(Math.abs(layers.getX(0)-.1)<1e-6);assert.equal(layers.getX(9),1);
+  removeFurShells(mesh);mesh.geometry.dispose();mesh.material.dispose();
+});
