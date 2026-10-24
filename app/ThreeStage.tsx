@@ -18,7 +18,7 @@ import { useTriplanarMaps } from "./triplanar";
 import { createShaderMaterial, shaderPresets, type ShaderPreset } from "./shaderMaterials";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
-import {exportFbx} from "./modelExport";
+import {exportFbx,embedFbxTextures} from "./modelExport";
 import {USDZExporter} from "three/addons/exporters/USDZExporter.js";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -615,7 +615,11 @@ const textureAssets: Record<string, [string, string, string?]> = {
 const textureCache = new Map<string, THREE.Texture>();
 
 function loadTexture(url: string, color = false) {
-  if (!textureCache.has(url)) textureCache.set(url, new THREE.TextureLoader().load(url));
+  if (!textureCache.has(url)) {
+    let loaded!:()=>void,failed!:(error:unknown)=>void;
+    const ready=new Promise<void>((resolve,reject)=>{loaded=resolve;failed=reject;});ready.catch(()=>{});
+    const texture=new THREE.TextureLoader().load(url,loaded,undefined,failed);texture.userData.ready=ready;textureCache.set(url,texture);
+  }
   const texture = textureCache.get(url)!;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   if (color) texture.colorSpace = THREE.SRGBColorSpace;
@@ -746,6 +750,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     },
     async exportModel(name,format) {
       const runtime=runtimeRef.current;if(!runtime)return false;
+      const appearance=latestPropsRef.current;
       try{
         const model=runtime.model.clone();model.traverse(child=>{if(child.userData.furShell)child.removeFromParent();});
         model.updateMatrixWorld(true);
@@ -753,7 +758,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
           const data=await new USDZExporter().parseAsync(model);
           downloadBlob(new Blob([data as Uint8Array<ArrayBuffer>],{type:"model/vnd.usdz+zip"}),`${name}.usdz`);
         }else{
-          const data=format==="FBX"?exportFbx(model):new OBJExporter().parse(model);
+          if(format==="FBX"&&appearance.colorMode==="Image")await waitForImageFill(appearance.imageFill??"");
+          const data=format==="FBX"?exportFbx(model,appearance,await embedFbxTextures(model)):new OBJExporter().parse(model);
           downloadBlob(new Blob([data],{type:"text/plain"}),`${name}.${format.toLowerCase()}`);
         }
         return true;
