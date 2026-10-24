@@ -33,6 +33,7 @@ export type StageHandle = {
 
 type StageProps = GradientSettings & {
   gravity?:boolean;
+  interactive?:boolean;
   furLength?:number;
   furDensity?:number;
   backgroundFill?:BackgroundFill;
@@ -798,7 +799,7 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     const pointRay=(event:PointerEvent)=>{const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);};
     const emitRotation=(time=performance.now())=>{const runtime=runtimeRef.current;if(!runtime||time-runtime.lastRotationEmit<40)return;runtime.lastRotationEmit=time;latestPropsRef.current.onRotationChange?.({x:Math.round(THREE.MathUtils.radToDeg(model.rotation.x)*10)/10,y:Math.round(THREE.MathUtils.radToDeg(model.rotation.y)*10)/10,z:Math.round(THREE.MathUtils.radToDeg(model.rotation.z)*10)/10});};
     const pointerDown=(event:PointerEvent)=>{
-      if(event.button!==0)return;
+      if(event.button!==0||latestPropsRef.current.interactive===false)return;
       runtimeRef.current!.autoRotate=false;
       pointRay(event);const hit=raycaster.intersectObject(model,true)[0];
       grabbed=Boolean(hit);if(hit){grabLocal.copy(hit.point);model.worldToLocal(grabLocal);}
@@ -879,6 +880,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
     return () => { cancelAnimationFrame(frame);model.children.forEach(child=>{if(child instanceof THREE.Mesh)removeFurShells(child);}); observer.disconnect(); worker.terminate(); controls.dispose();renderer.domElement.removeEventListener("pointerdown",pointerDown);renderer.domElement.removeEventListener("pointermove",pointerMove);renderer.domElement.removeEventListener("pointerup",pointerUp);renderer.domElement.removeEventListener("pointercancel",pointerUp);renderer.domElement.removeEventListener("lostpointercapture",pointerUp);renderer.domElement.removeEventListener("wheel",stopAuto);backgroundTarget.dispose();composer.dispose();renderer.dispose(); host.removeChild(renderer.domElement);host.removeChild(asciiCanvas);runtimeRef.current = null; };
   }, []);
 
+  useEffect(()=>{if(runtimeRef.current)runtimeRef.current.controls.enabled=props.interactive!==false;},[props.interactive]);
+
   useEffect(()=>{
     physicsRef.current=null;
     if(runtimeRef.current&&props.gravity)runtimeRef.current.autoRotate=false;
@@ -934,8 +937,8 @@ export const ThreeStage = forwardRef<StageHandle, StageProps>(function ThreeStag
 
   useEffect(() => {
     const runtime=runtimeRef.current; if(!runtime)return;
-    const old=runtime.scene.background; // Transmission needs an opaque scene background; CSS behind the canvas cannot refract.
-    runtime.scene.background=presetBackground(props.background,props.backgroundFill)??(props.material==="Glass"?new THREE.Color("#080808"):null);
+    const old=runtime.scene.background;
+    runtime.scene.background=presetBackground(props.background,props.backgroundFill);
     if(old instanceof THREE.Texture && !Array.from(textureCache.values()).includes(old)) old.dispose();
   },[props.background,props.backgroundFill,props.material]);
 

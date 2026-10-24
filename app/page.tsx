@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Copy01Icon, ClipboardPasteIcon, FloppyDiskIcon, AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
+import { Copy01Icon, ClipboardPasteIcon, FloppyDiskIcon, AddIcon, Remove01Icon, Cancel01Icon, ArrowUpRight01Icon, ArrowDown01Icon, UndoIcon, RedoIcon, RefreshIcon, ViewOffIcon, ViewIcon, Target01Icon, InformationCircleIcon, HeartIcon, Image01Icon, CodeIcon, TextIcon, CubeIcon, Rotate360Icon, BubblesIcon, PencilIcon, GridIcon, CircleIcon, ColorsIcon, CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
 import { ColorSpectrum } from "./ColorSpectrum";
 import { nextPresetName } from "./presetNames";
 import { captionOpacity, captionInk, type RGB } from "./contrast";
@@ -34,6 +34,7 @@ type EmbedPayload = {
   params:ShapeParams;
   scene:{light:number;lightX:number;lightY:number;lightZ:number;ambientLight:number;shadowSoftness:number;shadowOpacity:number;shadows:boolean;background:string;gravity?:boolean;backgroundFill?:BackgroundFill;camera?:{zoom:number;focalLength:number};rotation:{x:number;y:number;z:number}};
   customMaterialUrl?:string;
+  controls?:{interactive:boolean;gravity:boolean};
 };
 
 type SavedPreset={id:string;name:string;params:ShapeParams;scene:EmbedPayload["scene"]};
@@ -259,16 +260,17 @@ function EmbedViewer(){
   const [error,setError]=useState("");
   const stageRef=useRef<StageHandle>(null);
   const rotationApplied=useRef(false);
-  useEffect(()=>{let cancelled=false;decodeEmbedPayload(window.location.hash.slice(1)).then(value=>{if(!cancelled)setPayload(value);}).catch(()=>{if(!cancelled)setError("This embed link is invalid or incomplete.");});return()=>{cancelled=true;};},[]);
+  const [gravity,setGravity]=useState(false);
+  useEffect(()=>{const keyDown=(event:KeyboardEvent)=>{if(payload?.controls?.gravity===false||event.code!=="KeyG"||event.repeat||event.metaKey||event.ctrlKey||event.altKey)return;event.preventDefault();setGravity(value=>!value);};window.addEventListener("keydown",keyDown);return()=>window.removeEventListener("keydown",keyDown);},[payload]);
+  useEffect(()=>{let cancelled=false;decodeEmbedPayload(window.location.hash.slice(1)).then(value=>{if(!cancelled){setPayload(value);setGravity(value.scene.gravity??false);}}).catch(()=>{if(!cancelled)setError("This embed link is invalid or incomplete.");});return()=>{cancelled=true;};},[]);
   const applyRotation=useCallback(()=>{if(!payload||rotationApplied.current)return;rotationApplied.current=true;if(payload.scene.camera){stageRef.current?.setCamera("zoom",payload.scene.camera.zoom);stageRef.current?.setCamera("focalLength",payload.scene.camera.focalLength);}(["x","y","z"] as const).forEach(axis=>stageRef.current?.setRotation(axis,payload.scene.rotation[axis]));},[payload]);
   if(error)return <main className="embed-shell embed-message"><img src={publicAsset("favicon.svg")} alt=""/><strong>Playtools</strong><p>{error}</p></main>;
   if(!payload)return <main className="embed-shell embed-message"><span className="embed-spinner"/><strong>Loading Playtools embed</strong></main>;
   const p=migrateAppearance(payload.params),s=payload.scene;
   const glyphs=p.asciiCharacterSet==="Custom Set"?p.asciiCustomSet:(asciiCharacterSets[p.asciiCharacterSet]??asciiCharacterSets["Letters + Numbers"]);
-  return <main className="embed-shell">
-    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} furLength={p.furLength??35} furDensity={p.furDensity??120} customMaterialUrl={payload.customMaterialUrl} color={p.color} colorMode={p.colorMode??"Solid"} gradientColor={p.gradientColor??"#6C5CE7"} gradientAngle={p.gradientAngle??0} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} revolveAngle={p.revolveAngle??360} revolveEdge={p.revolveEdge??"Outer"} inflateAmount={p.inflateAmount} inflateDirection={p.inflateDirection??"Outward"} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalMapEnabled===false?0:p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.effect} effectIntensity={p.effectIntensity} effectBlur={p.effectBlur??4} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} backgroundFill={s.backgroundFill} onReady={applyRotation}/>
-    <a className="embed-brand" href={new URL(import.meta.env.BASE_URL,window.location.origin).href} target="_blank" rel="noreferrer"><img src={publicAsset("favicon.svg")} alt=""/><span>Playtools</span></a>
-    <div className="embed-hint">LMB rotate · RMB pan · Scroll zoom</div>
+  return <main className="embed-shell" data-background={s.background} onPointerDown={()=>window.focus()}>
+    <ThreeStage ref={stageRef} source={payload.shape.source} fileName={payload.shape.fileName} text={payload.shape.text} fontUrl={payload.shape.fontUrl} fontWeight={p.fontWeight} letterSpacing={p.letterSpacing} lineSpacing={p.lineSpacing} geometryMode={p.geometryMode} thickness={p.thickness} material={p.material} furLength={p.furLength??35} furDensity={p.furDensity??120} customMaterialUrl={payload.customMaterialUrl} color={p.color} colorMode={p.colorMode??"Solid"} gradientColor={p.gradientColor??"#6C5CE7"} gradientAngle={p.gradientAngle??0} colorOpacity={p.colorOpacity} glassIor={p.glassIor} glassTransparency={p.glassTransparency} roughness={p.roughness} light={s.light} lightX={s.lightX} lightY={s.lightY} lightZ={s.lightZ} ambientLight={s.ambientLight} shadowSoftness={s.shadowSoftness} shadowOpacity={s.shadowOpacity} shadows={s.shadows} segments={p.segments} surfaceDetail={p.surfaceDetail} edge={p.edge} mass={p.mass} revolveAngle={p.revolveAngle??360} revolveEdge={p.revolveEdge??"Outer"} inflateAmount={p.inflateAmount} inflateDirection={p.inflateDirection??"Outward"} bend={p.bend} bulge={p.bulge} taper={p.taper} twist={p.twist} textureRepeat={p.textureRepeat} textureRotation={p.textureRotation} textureTint={p.textureTint} normalStrength={p.normalMapEnabled===false?0:p.normalStrength} asciiCharacters={p.asciiCharacters} asciiGlyphs={glyphs} effect={p.effect} effectIntensity={p.effectIntensity} effectBlur={p.effectBlur??4} effectBackground={p.effectBackground} duotoneDarkColor={p.duotoneDarkColor} duotoneColor={p.duotoneColor} background={s.background} backgroundFill={s.backgroundFill} gravity={gravity} interactive={payload.controls?.interactive} onReady={applyRotation}/>
+    <a className="embed-brand" href={new URL(import.meta.env.BASE_URL,window.location.origin).href} target="_blank" rel="noreferrer"><img src={publicAsset("playtools-logo.svg")} alt="Playtools"/></a>
   </main>;
 }
 
@@ -350,6 +352,7 @@ function Home() {
   const [triangles, setTriangles] = useState(0);
   const [embedOpen, setEmbedOpen] = useState(false);
   const [embedCode,setEmbedCode]=useState("");
+  const [embedOptions,setEmbedOptions]=useState({interactive:true,shadows:true,gravity:false});
   const [embedBusy,setEmbedBusy]=useState(false);
   const [toast, setToast] = useState("");
   const [isRendering, setIsRendering] = useState(false);
@@ -662,7 +665,7 @@ function Home() {
     window.addEventListener("resize",update);return()=>{cancelled=true;window.removeEventListener("resize",update);};
   },[background,backgroundFill,language,interfaceHidden,gravity]);
 
-  const prepareEmbed=async()=>{
+  const prepareEmbed=async(options=embedOptions)=>{
     if(!activeShape||embedBusy)return;
     setEmbedBusy(true);
     try{
@@ -670,7 +673,7 @@ function Home() {
       const fontUrl=activeShape.kind==="text"?(activeShape.fontBlob?await blobToDataUrl(activeShape.fontBlob):activeShape.fontUrl):undefined;
       const customMaterialUrl=activeCustomMaterial?await blobToDataUrl(activeCustomMaterial.blob):undefined;
       const embedBackground=activeCustomBackground?await blobToDataUrl(activeCustomBackground.blob):background;
-      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows,background:embedBackground,backgroundFill:background==="Fill"?backgroundFill:undefined,camera:cameraView,rotation:{...rotation}},customMaterialUrl};
+      const payload:EmbedPayload={version:1,shape:{fileName,source:shapeSource,text:activeShape.kind==="text"?activeShape.text:undefined,fontUrl},params:{...currentParams},scene:{light,lightX,lightY,lightZ,ambientLight,shadowSoftness,shadowOpacity,shadows:options.shadows,gravity:options.gravity,background:embedBackground,backgroundFill:background==="Fill"?backgroundFill:undefined,camera:cameraView,rotation:{...rotation}},customMaterialUrl,controls:{interactive:options.interactive,gravity:options.gravity}};
       const encoded=await encodeEmbedPayload(payload);
       const url=new URL(import.meta.env.BASE_URL,window.location.origin);url.searchParams.set("embed","1");url.hash=encoded;
       setEmbedCode(`<iframe src="${url.href}" width="640" height="640" title="Playtools 3D model" style="border:0" loading="lazy" allow="fullscreen"></iframe>`);
@@ -854,7 +857,7 @@ function Home() {
         <div className={`export-actions ${effect==="ASCII"?"ascii-export":""}`}>
           <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d`,false); flash("Transparent PNG exported"); }}><span><HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true"/></span><div><b>PNG</b></div></button>
           <button onClick={() => { stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/, "")}-3d-bg`,true); flash("PNG with background exported"); }}><span><HugeiconsIcon icon={Image01Icon} size={14} aria-hidden="true"/></span><div><b>PNG + BG</b></div></button>
-          <button disabled={embedBusy} onClick={()=>void prepareEmbed()}><span><HugeiconsIcon icon={CodeIcon} size={14} aria-hidden="true"/></span><div><b>{embedBusy?"Preparing…":"Embed"}</b></div></button>
+          <button disabled={embedBusy} onClick={()=>{const options={interactive:true,shadows,gravity};setEmbedOptions(options);void prepareEmbed(options);}}><span><HugeiconsIcon icon={CodeIcon} size={14} aria-hidden="true"/></span><div><b>{embedBusy?"Preparing…":"Embed"}</b></div></button>
           {effect==="ASCII"&&<button onClick={()=>{stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`);flash("ASCII text exported");}}><span><HugeiconsIcon icon={TextIcon} size={14} aria-hidden="true"/></span><div><b>TXT</b></div></button>}
           <button onClick={() => { stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, "")); flash("OBJ geometry exported"); }}><span><HugeiconsIcon icon={CubeIcon} size={14} aria-hidden="true"/></span><div><b>OBJ</b></div></button>
         </div>
@@ -867,9 +870,9 @@ function Home() {
         <a className="author-badge" href="https://razuvaev.me" target="_blank" rel="noreferrer"><img src={publicAsset("rzw.svg")} alt=""/><strong>Alexey Razuvaev</strong></a>
       </section>
 
-      {interfaceHidden&&<div className="fullscreen-actions"><button onClick={()=>setInterfaceHidden(false)}>{t("Show UI")}</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d`,false)}><HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true"/> PNG</button><button onClick={()=>stageRef.current?.exportPng(`${fileName.replace(/\.[^.]+$/,"")}-3d-bg`,true)}><HugeiconsIcon icon={Image01Icon} size={14} aria-hidden="true"/> PNG + BG</button>{effect==="ASCII"&&<button onClick={()=>stageRef.current?.exportTxt(`${fileName.replace(/\.[^.]+$/,"")}-ascii`)}><HugeiconsIcon icon={TextIcon} size={14} aria-hidden="true"/> TXT</button>}<button onClick={()=>stageRef.current?.exportObj(fileName.replace(/\.[^.]+$/, ""))}><HugeiconsIcon icon={CubeIcon} size={14} aria-hidden="true"/> OBJ</button></div>}
+      {interfaceHidden&&<button className="restore-ui" title={t("Show UI")} aria-label={t("Show UI")} onClick={()=>setInterfaceHidden(false)}><HugeiconsIcon icon={ViewIcon} size={18} aria-hidden="true"/></button>}
 
-      {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" onMouseDown={(e) =>e.stopPropagation()}><button className="modal-close" aria-label={t("Close")} onClick={() => setEmbedOpen(false)}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button><span className="eyebrow">{t("INTERACTIVE EMBED")}</span><h3>{t("Put this shape anywhere.")}</h3><p>{t("Copy the snippet and paste it into your site. The model keeps rotation, material and color settings.")}</p><pre data-embed-code={embedCode}>{embedCode.length>900?`${embedCode.slice(0,900)}…`:embedCode}</pre><button className="copy-button" onClick={() => { void navigator.clipboard.writeText(embedCode).then(()=>flash("Embed code copied")); }}>{t("Copy embed code")}</button></div></div>}
+      {embedOpen && <div className="modal-backdrop" onMouseDown={() => setEmbedOpen(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Embed" onMouseDown={(e) =>e.stopPropagation()}><button className="modal-close" aria-label={t("Close")} onClick={() => setEmbedOpen(false)}><HugeiconsIcon icon={Cancel01Icon} size={14} aria-hidden="true"/></button><div className="embed-options">{([['interactive',language==='ru'?'Перетягивание и вращение':'Drag and rotate'],['shadows',language==='ru'?'Отображать тень':'Render shadow'],['gravity',language==='ru'?'Гравитация (G)':'Gravity (G)']] as const).map(([key,label])=><label key={key} className="switch-row"><span>{label}</span><input type="checkbox" checked={embedOptions[key]} disabled={embedBusy} onChange={event=>{const next={...embedOptions,[key]:event.target.checked};setEmbedOptions(next);void prepareEmbed(next);}}/><i/></label>)}</div><pre data-embed-code={embedCode}>{embedCode.length>900?`${embedCode.slice(0,900)}…`:embedCode}</pre><button className="copy-button" disabled={embedBusy} onClick={() => { void navigator.clipboard.writeText(embedCode).then(()=>flash("Embed code copied")); }}>{t("Copy embed code")}</button></div></div>}
       {toast && <div className="toast"><span><HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} aria-hidden="true"/></span>{toast}</div>}
     </main>
   );
